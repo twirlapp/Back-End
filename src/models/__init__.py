@@ -21,10 +21,8 @@
 # SUCH DAMAGES.
 #
 
-from flask.views import MethodView
+# noinspection PyUnresolvedReferences
+from pymodm import *
+from src.models import (channels_model, comments_model, post_models, reactions_model, user_model)
 
-
-class Posts(MethodView):
-
-    def get(self, ):
-        pass
+__all__ = ['channels_model', 'comments_model', 'post_models', 'reactions_model', 'user_model']

@@ -21,10 +21,6 @@
 # SUCH DAMAGES.
 #
 
-from flask.views import MethodView
+from src.utils import generator_utils
 
-
-class Posts(MethodView):
-
-    def get(self, ):
-        pass
+__all__ = ['generator_utils']

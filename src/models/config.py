@@ -21,10 +21,14 @@
 # SUCH DAMAGES.
 #
 
-from flask.views import MethodView
+"""
+config file for models
+"""
 
+MONGO_URI = 'mongo://localhost:27017'
 
-class Posts(MethodView):
+USE_SSL = False
 
-    def get(self, ):
-        pass
+DB_ADMIN_USERNAME = None
+
+DB_ADMIN_PASSWORD = None

@@ -1,10 +1,34 @@
+#
+# Copyright (C) Halk-lai Liff <halkliff@pm.me> & Werberth Lins <werberth.lins@gmail.com>, 2018-present
+# Distributed under GNU AGPLv3 License, found at the root tree of this source, by the name of LICENSE
+# You can also find a copy of this license at GNU's site, as it follows <https://www.gnu.org/licenses/agpl-3.0.en.html>
+#
+# THIS SOFTWARE IS PRESENTED AS-IS, WITHOUT ANY WARRANTY, OR LIABILITY FROM ITS AUTHORS
+# EITHER EXPRESSED OR IMPLIED, INCLUDING, BUT NOT LIMITED TO,
+# THE IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR
+# PURPOSE.  THE ENTIRE RISK AS TO THE QUALITY AND PERFORMANCE OF THE PROGRAM
+# IS WITH YOU.  SHOULD THE PROGRAM PROVE DEFECTIVE, YOU ASSUME THE COST OF
+# ALL NECESSARY SERVICING, REPAIR OR CORRECTION.
+#
+# IN NO EVENT UNLESS REQUIRED BY APPLICABLE LAW OR AGREED TO IN WRITING
+# WILL ANY COPYRIGHT HOLDER, OR ANY OTHER PARTY WHO MODIFIES AND/OR CONVEYS
+# THE PROGRAM AS PERMITTED ABOVE, BE LIABLE TO YOU FOR DAMAGES, INCLUDING ANY
+# GENERAL, SPECIAL, INCIDENTAL OR CONSEQUENTIAL DAMAGES ARISING OUT OF THE
+# USE OR INABILITY TO USE THE PROGRAM (INCLUDING BUT NOT LIMITED TO LOSS OF
+# DATA OR DATA BEING RENDERED INACCURATE OR LOSSES SUSTAINED BY YOU OR THIRD
+# PARTIES OR A FAILURE OF THE PROGRAM TO OPERATE WITH ANY OTHER PROGRAMS),
+# EVEN IF SUCH HOLDER OR OTHER PARTY HAS BEEN ADVISED OF THE POSSIBILITY OF
+# SUCH DAMAGES.
+#
+
 from src.models import fields, MongoModel, EmbeddedMongoModel, connect
 from pymongo import write_concern as wc, read_concern as rc, IndexModel, ReadPreference
 from .channels_model import Channel
 from .user_model import User
 from .reactions_model import Reaction
+from .config import *
 
-connect('mongodb://localhost:27017/posts', alias='Posts')
+connect(f'{MONGO_URI}/posts', alias='Posts', ssl=USE_SSL, username=DB_ADMIN_USERNAME, password=DB_ADMIN_PASSWORD)
 
 
 class GlobalPostAnalytics(MongoModel):
@@ -39,7 +63,7 @@ class LinkList(EmbeddedMongoModel):
                                         mongo_name='linksRow')
 
 
-class _PostModel(MongoModel):
+class PostModel(MongoModel):
     """
     Generic Post Model, should not be directly used, there are
     fields that needs to be implemented for normal Posts.
@@ -53,11 +77,10 @@ class _PostModel(MongoModel):
     message_id = fields.BigIntegerField(required=True, verbose_name='post_message_id', mongo_name='messageId')
     mime_type = fields.CharField(verbose_name='post_mime_type', mongo_name='mimeType', default=None)
     type = fields.CharField(verbose_name='post_type', mongo_name='type', required=True,
-                            choices=('image', 'text', 'video',
-                                     'animation', 'document', 'sticker',
-                                     'video_note', 'voice', 'audio')
+                            choices=('image', 'text', 'video', 'animation',
+                                     'document', 'video_note', 'voice', 'audio')
                             )
-
+    group_hash = fields.CharField(verbose_name='group_hash', mongo_name='groupHash', default=None)
     created_date = fields.DateTimeField(required=True, verbose_name='post_created_date', mongo_name='createdDate')
     tags = fields.ListField(field=fields.CharField, verbose_name='tags', mongo_name='tags', default=None)
     source = fields.EmbeddedDocumentField(Link, verbose_name='source', mongo_name='source', default=None)
@@ -77,13 +100,15 @@ class _PostModel(MongoModel):
         indexes = [
             IndexModel('creator', name='postCreatorIndex', unique=True, sparse=True),
             IndexModel('postId', name='postIdIndex', unique=True, sparse=True),
+            IndexModel('groupHash', name='postGroupHashIndex', unique=True, sparse=True),
             IndexModel('messageId', name='postMessageIdIndex', unique=True, sparse=True),
-            IndexModel('channelId', name='postChannelIdIndex', unique=True, sparse=True)
+            IndexModel('channelId', name='postChannelIdIndex', unique=True, sparse=True),
+            IndexModel('createdDate', name='postCreatedDateIndex', unique=True, sparse=True)
         ]
         ignore_unknown_fields = True
 
 
-class ImagePost(_PostModel):
+class ImagePost(PostModel):
     file_id = fields.CharField(required=True, verbose_name='file_id', mongo_name='fileId')
     thumbnail_file_id = fields.CharField(verbose_name='thumbnail_file_id', mongo_name='thumbFileId', default=None)
     thumbnail_size = fields.IntegerField(verbose_name='thumbnail_size', mongo_name='thumbSize', default=None)
@@ -93,7 +118,7 @@ class ImagePost(_PostModel):
     height = fields.IntegerField(verbose_name='height', mongo_name='height', required=True)
 
 
-class VideoNotePost(_PostModel):
+class VideoNotePost(PostModel):
     file_id = fields.CharField(required=True, verbose_name='file_id', mongo_name='fileId')
     thumbnail_file_id = fields.CharField(verbose_name='thumbnail_file_id', mongo_name='thumbFileId', default=None)
     thumbnail_size = fields.IntegerField(verbose_name='thumbnail_size', mongo_name='thumbSize', default=None)
@@ -111,7 +136,7 @@ class AnimationPost(VideoPost):
     file_name = fields.CharField(verbose_name='file_name', mongo_name='fileName', default=None)
 
 
-class VoicePost(_PostModel):
+class VoicePost(PostModel):
     file_id = fields.CharField(required=True, verbose_name='file_id', mongo_name='fileId')
     duration = fields.IntegerField(verbose_name='duration', mongo_name='duration', required=True)
     file_size = fields.IntegerField(verbose_name='file_size', mongo_name='fileSize', default=None)
@@ -125,7 +150,7 @@ class AudioPost(VoicePost):
     thumbnail_size = fields.IntegerField(verbose_name='thumbnail_size', mongo_name='thumbSize', default=None)
 
 
-class DocumentPost(_PostModel):
+class DocumentPost(PostModel):
     file_id = fields.CharField(required=True, verbose_name='file_id', mongo_name='fileId')
     thumbnail_file_id = fields.CharField(verbose_name='thumbnail_file_id', mongo_name='thumbFileId', default=None)
     thumbnail_size = fields.IntegerField(verbose_name='thumbnail_size', mongo_name='thumbSize', default=None)
@@ -134,14 +159,16 @@ class DocumentPost(_PostModel):
     file_name = fields.CharField(verbose_name='file_name', mongo_name='fileName', default=None)
 
 
-class TextPost(_PostModel):
+class TextPost(PostModel):
     text = fields.CharField(required=True, verbose_name='text', mongo_name='text', default='')
 
 
 class Posts(MongoModel):
+    _id = fields.CharField(required=True, primary_key=True)
+    posts_hash = fields.CharField(required=True, verbose_name='group_hash', mongo_name='groupHash')
     creator = fields.ReferenceField(User, on_delete=fields.ReferenceField.CASCADE,
                                     verbose_name='creator', mongo_name='creator', required=True)
-    date_created = fields.DateTimeField(verbose_name='date_created', mongo_name='creationDate', required=True)
+    date_created = fields.DateTimeField(verbose_name='date_created', mongo_name='createdDate', required=True)
     channel = fields.ReferenceField(Channel, on_delete=fields.ReferenceField.CASCADE,
                                     verbose_name='post_channel_id', mongo_name='channelId', required=True)
     posts = fields.ListField(fields.CharField, verbose_name='post_list', mongo_name='posts', required=True,
@@ -155,8 +182,10 @@ class Posts(MongoModel):
         read_preference = ReadPreference.NEAREST
         read_concern = rc.ReadConcern(level='majority')
         indexes = [
+            IndexModel('groupHash', name='postListGroupHashIndex', unique=True, sparse=True),
             IndexModel('creator', name='postListCreatorIndex', unique=True, sparse=True),
             IndexModel('posts', name='postListIndex', unique=True, sparse=True),
-            IndexModel('channelId', name='postChannelIdIndex', unique=True, sparse=True)
+            IndexModel('channelId', name='postListChannelIdIndex', unique=True, sparse=True),
+            IndexModel('creationDate', name='postListCreatedDateIndex', unique=True, sparse=True)
         ]
         ignore_unknown_fields = True

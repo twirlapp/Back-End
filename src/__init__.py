@@ -21,10 +21,6 @@
 # SUCH DAMAGES.
 #
 
-from flask.views import MethodView
+from src import controllers, models, utils
 
-
-class Posts(MethodView):
-
-    def get(self, ):
-        pass
+__all__ = ['controllers', 'models', 'utils']
