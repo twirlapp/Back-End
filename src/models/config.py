@@ -25,7 +25,7 @@
 config file for models
 """
 
-MONGO_URI = 'mongo://localhost:27017'
+MONGO_URI = 'mongodb://localhost:27017'
 
 USE_SSL = False
 

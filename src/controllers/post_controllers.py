@@ -27,21 +27,18 @@ from ..models.post_models import Posts, Link, LinkList, GlobalPostAnalytics
 from ..models.reactions_model import Reaction
 from ..models.user_model import User
 from ..models.channels_model import Channel
+from ..models.comments_model import Comment
 from .user_controllers import get_users
 from .channel_controllers import get_channels
 from typing import List, Union, Dict
 from ..utils.generator_utils import id_generator, hash_generator
-from .reaction_controllers import add_reaction  # , remove_reaction
-# from .comments_controller import remove_comments
+from .reaction_controllers import add_reaction
 import datetime
 
-# TODO: Methods to remove posts, methods to add and remove comments, add and remove reactions, add and remove ranks.
 
-
-def add_posts(posts: List[PostModel],
-              user_model: User = None, user_id: int = None,
-              channel_model: Channel = None, channel_id: int = None,
-              )-> Posts:
+def add_post_group(posts: List[PostModel],
+                   user_model: User = None, user_id: int = None,
+                   channel_model: Channel = None, channel_id: int = None)-> Posts:
     """
     Adds posts to a group.
     :param posts: Posts to be grouped
@@ -90,17 +87,41 @@ def add_posts(posts: List[PostModel],
         raise
 
 
-def remove_posts(group_hash: str = None)-> bool:
+def remove_post_group(group_model: Posts = None, group_hash: str = None)-> bool:
     """
     Remove a group of posts, the posts themselves, and any reactions / comments associated with this group.
-    :param group_hash: The identifier of the group in the database
+    :param group_model: The model instance of the group posts in the database
+    :param group_hash: The identifier of the group in the database. Only used if `group_model` is None
     :return: True if deleted, False if the group never existed, or the Exception raised by the data validation
              (less likely to happen).
     """
     try:
-        posts_group = Posts.objects.get({'groupHash': group_hash})
+        posts_group = group_model if group_model is not None else get_post_group(group_hash=group_hash)
+        posts_group.is_deleted = True
+        posts_group.deleted_date = datetime.datetime.now()
+        _comments = Comment.objects.raw({'postReference': {'$in': posts_group.posts}})
+        _reactions = Reaction.objects.raw({'postId': {'$in': posts_group.posts}})
+        if posts_group.is_valid():
+            _comments.update({'$set': {'deletedDate': datetime.datetime.now(), 'isDeleted': True}})
+            _reactions.update({'$set': {'deletedDate': datetime.datetime.now(), 'isDeleted': True}})
+            posts_group.post_id.save(full_clean=True)
+            return True
+        else:
+            raise posts_group.full_clean()
     except Posts.DoesNotExist:
         return False
+
+
+def get_post_group(group_hash: str)-> Posts:
+    """
+    Gets a model instance of a Post group
+    :param group_hash: The identifier of the post group
+    :return: A [Posts] instance
+    """
+    try:
+        return Posts.objects.get({'groupHash': group_hash})
+    except Posts.DoesNotExist:
+        raise
 
 
 def add_text_post(user_model: User = None, user_id: int = None,
@@ -1081,23 +1102,51 @@ def add_file_post(user_model: User = None, user_id: int = None,
         raise
 
 
-def remove_post(post_id: str)-> bool:
+def remove_post(post_model: PostModel = None, post_id: str = None)-> bool:
     """
-
-    :param post_id:
-    :return:
+    Remove a post, and all it's associated comments from the database, by setting the deleted flag.
+    :param post_model: The model instance of a post on the database
+    :param post_id: The identifier of a post on the database. Used only if `post_model` is None
+    :return: True if deleted, False if the post was never added, or the Exception raised by the data validation
+             (less likely to happen).
     """
-    raise NotImplementedError
+    try:
+        post = post_model if post_model is not None else get_posts(post_id=post_id)
+        post.is_deleted = True
+        post.deleted_date = datetime.datetime.now()
+        _comments = Comment.objects.raw({'postReference': post.post_id})
+        _reactions = Reaction.objects.raw({'postId': post.post_id})
+        if post.is_valid():
+            _comments.update({'$set': {'deletedDate': datetime.datetime.now(), 'isDeleted': True}})
+            _reactions.update({'$set': {'deletedDate': datetime.datetime.now(), 'isDeleted': True}})
+            post.save(full_clean=True)
+            if post.group_hash is not None:
+                Posts.objects.raw({'groupHash': post.group_hash}).update({'$pullAll': {'posts': [post.post_id]}})
+            return True
+        else:
+            raise post.full_clean()
+    except PostModel.DoesNotExist:
+        return False
 
 
-def get_post(post_model: PostModel = None, post_id: str = None)-> PostModel:
+def get_posts(post_id: str = None, post_ids: List[str] = None)-> Union[PostModel, None]:
     """
-
-    :param post_model:
-    :param post_id:
-    :return:
+    Gets a single post, or an iterable array of posts from the database. Required either `post_id` or `post_ids`
+    :param post_id: (Optional) The identifier of a post on the database
+    :param post_ids: (Optional) A list of identifiers of posts in the database
+    :return: a single [PostModel] instance, an iterable of [PostModel] instances, or None, if either the params are
+             None, or there are no database matches.
     """
-    raise NotImplementedError
+    try:
+        if post_id is not None:
+            posts = PostModel.objects.get({'postId': post_id, 'isDeleted': False})
+        elif post_ids is not None:
+            posts = PostModel.objects.raw({'postId': {'$in': post_id}, 'isDeleted': False})
+        else:
+            raise PostModel.DoesNotExist
+        return posts
+    except PostModel.DoesNotExist:
+        raise
 
 
 def _create_link(link_map: Dict[str, str]) -> Union[Link, None]:

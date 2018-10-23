@@ -38,10 +38,11 @@ def add_user(user_id: int, *, first_name: str = None, last_name: str = None, use
     """
 
     try:
-        user = get_users(user_id=user_id)
-        user.is_deleted = False
-        user.deleted_date = None
-        user.save()
+        user = User.objects.get({'userId': user_id})
+        if user.is_deleted:
+            User.objects.raw({'userId': user_id}).update({'$set': {'isDeleted': False}, '$unset': {'deletedDate': ''}})
+        return edit_user_info(user_id, first_name=first_name, last_name=last_name, username=username)
+
     except User.DoesNotExist:
         join_time = datetime.datetime.now()
         user = User(
@@ -92,16 +93,20 @@ def edit_user_info(user_id: int, *, first_name: str = None, last_name: str = Non
         return add_user(user_id=user_id, first_name=first_name, last_name=last_name, username=username)
 
 
-def delete_user(user_id: int)-> bool:
+def delete_user(user_model: User = None, user_id: int = None)-> bool:
     """
     Remove a user from the database, using it's Telegram's ID, by setting the deleted flag.
-    :param user_id: Telegram's ID
+    :param user_model: Model instance of a user in the database.
+    :param user_id: Telegram's ID. Used only if `user_model` is None.
     :return: True if deleted, False if the user was never added, or the Exception raised by the data validation
              (less likely to happen).
     """
-
+    from ..models.post_models import PostModel
+    from ..models.comments_model import Comment
+    from ..models.channels_model import Channel
+    from .channel_controllers import remove_admins
     try:
-        user = get_users(user_id=user_id)
+        user = user_model if user_model is not None else get_users(user_id=user_id)
         user.is_deleted = True
         user.deleted_date = datetime.datetime.now()
 

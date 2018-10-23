@@ -23,10 +23,11 @@
 
 from pymodm import fields, MongoModel, EmbeddedMongoModel, connect
 from pymongo import write_concern as wc, read_concern as rc, IndexModel, ReadPreference
-from .post_models import PostModel
-from .user_model import User
+from .config import *
+from .post_models import BasePostModel as PostModel
 
-connect('mongodb://localhost:27017/reactions', alias='Reactions')
+connect(f'{MONGO_URI}/reactions', alias='Reactions', ssl=USE_SSL,
+        username=DB_ADMIN_USERNAME, password=DB_ADMIN_PASSWORD)
 
 
 class ReactionObj(EmbeddedMongoModel):

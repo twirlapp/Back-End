@@ -21,10 +21,10 @@
 # SUCH DAMAGES.
 #
 
-from src.models import fields, MongoModel, EmbeddedMongoModel, connect
+from pymodm import fields, MongoModel, EmbeddedMongoModel, connect
 from pymongo import write_concern as wc, read_concern as rc, IndexModel, ReadPreference
 from re import compile
-from .user_model import User
+from ..models.user_model import User
 from .config import *
 
 connect(f'{MONGO_URI}/channels', alias='Channels', ssl=USE_SSL, username=DB_ADMIN_USERNAME, password=DB_ADMIN_PASSWORD)

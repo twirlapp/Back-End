@@ -21,12 +21,13 @@
 # SUCH DAMAGES.
 #
 
-from src.models import fields, MongoModel, connect
+from pymodm import fields, MongoModel
+from pymodm.connection import connect
 from pymongo import write_concern as wc, read_concern as rc, IndexModel, ReadPreference
 from re import compile
 from .config import *
 
-connect(f'{MONGO_URI}/users', alias='Users', ssl=USE_SSL, username=DB_ADMIN_USERNAME, password=DB_ADMIN_PASSWORD)
+u = connect(f'{MONGO_URI}/users', alias='Users', ssl=USE_SSL, username=DB_ADMIN_USERNAME, password=DB_ADMIN_PASSWORD)
 username_pattern = compile('[\w\d_]+')
 
 
@@ -47,7 +48,7 @@ class User(MongoModel):
     deleted_date = fields.DateTimeField(verbose_name='user_deleted_date', mongo_name='deletedDate', default=None)
 
     class Meta:
-        collection_alias = 'Users'
+        connection_alias = 'Users'
         collection_name = 'users'
         cascade = True
         write_concern = wc.WriteConcern(j=True)

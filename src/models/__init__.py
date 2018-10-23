@@ -21,8 +21,6 @@
 # SUCH DAMAGES.
 #
 
-# noinspection PyUnresolvedReferences
-from pymodm import *
 from src.models import (channels_model, comments_model, post_models, reactions_model, user_model)
 
 __all__ = ['channels_model', 'comments_model', 'post_models', 'reactions_model', 'user_model']

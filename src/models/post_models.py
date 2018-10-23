@@ -21,11 +21,10 @@
 # SUCH DAMAGES.
 #
 
-from src.models import fields, MongoModel, EmbeddedMongoModel, connect
+from pymodm import fields, MongoModel, EmbeddedMongoModel, connect
 from pymongo import write_concern as wc, read_concern as rc, IndexModel, ReadPreference
 from .channels_model import Channel
 from .user_model import User
-from .reactions_model import Reaction
 from .config import *
 
 connect(f'{MONGO_URI}/posts', alias='Posts', ssl=USE_SSL, username=DB_ADMIN_USERNAME, password=DB_ADMIN_PASSWORD)
@@ -63,17 +62,22 @@ class LinkList(EmbeddedMongoModel):
                                         mongo_name='linksRow')
 
 
-class PostModel(MongoModel):
-    """
-    Generic Post Model, should not be directly used, there are
-    fields that needs to be implemented for normal Posts.
-    """
+class BasePostModel(MongoModel):
     _id = fields.CharField(required=True, primary_key=True)
+    post_id = fields.CharField(required=True, verbose_name='post_id', mongo_name='postId')
     creator = fields.ReferenceField(User, on_delete=fields.ReferenceField.CASCADE,
                                     verbose_name='creator', mongo_name='creator')
     channel = fields.ReferenceField(Channel, on_delete=fields.ReferenceField.CASCADE,
                                     verbose_name='post_channel_id', mongo_name='channelId', required=True)
-    post_id = fields.CharField(required=True, verbose_name='post_id', mongo_name='postId')
+
+
+class PostModel(BasePostModel):
+    from .reactions_model import Reaction
+    """
+    Generic Post Model, should not be directly used, there are
+    fields that needs to be implemented for normal Posts.
+    """
+
     message_id = fields.BigIntegerField(required=True, verbose_name='post_message_id', mongo_name='messageId')
     mime_type = fields.CharField(verbose_name='post_mime_type', mongo_name='mimeType', default=None)
     type = fields.CharField(verbose_name='post_type', mongo_name='type', required=True,
@@ -82,7 +86,7 @@ class PostModel(MongoModel):
                             )
     group_hash = fields.CharField(verbose_name='group_hash', mongo_name='groupHash', default=None)
     created_date = fields.DateTimeField(required=True, verbose_name='post_created_date', mongo_name='createdDate')
-    tags = fields.ListField(field=fields.CharField, verbose_name='tags', mongo_name='tags', default=None)
+    tags = fields.ListField(field=fields.CharField(), verbose_name='tags', mongo_name='tags', default=None)
     source = fields.EmbeddedDocumentField(Link, verbose_name='source', mongo_name='source', default=None)
     links = fields.EmbeddedDocumentField(LinkList, verbose_name='links', mongo_name='links', default=None)
     reactions = fields.EmbeddedDocumentListField(Reaction, verbose_name='reactions', mongo_name='reactions',
@@ -91,7 +95,7 @@ class PostModel(MongoModel):
     deleted_date = fields.DateTimeField(verbose_name='post_deleted_date', mongo_name='deletedDate', default=None)
 
     class Meta:
-        collection_alias = 'Posts'
+        connection_alias = 'Posts'
         collection_name = 'posts'
         cascade = True
         write_concern = wc.WriteConcern(j=True)
@@ -171,11 +175,13 @@ class Posts(MongoModel):
     date_created = fields.DateTimeField(verbose_name='date_created', mongo_name='createdDate', required=True)
     channel = fields.ReferenceField(Channel, on_delete=fields.ReferenceField.CASCADE,
                                     verbose_name='post_channel_id', mongo_name='channelId', required=True)
-    posts = fields.ListField(fields.CharField, verbose_name='post_list', mongo_name='posts', required=True,
+    posts = fields.ListField(field=fields.CharField(), verbose_name='post_list', mongo_name='posts', required=True,
                              default=[])
+    is_deleted = fields.BooleanField(verbose_name='post_is_deleted', mongo_name='isDeleted', default=False)
+    deleted_date = fields.DateTimeField(verbose_name='deleted_date', mongo_name='deletedDate', default=None)
 
     class Meta:
-        collection_alias = 'Posts'
+        connection_alias = 'Posts'
         collection_name = 'post_lists'
         cascade = True
         write_concern = wc.WriteConcern(j=True)

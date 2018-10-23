@@ -47,10 +47,8 @@ def add_channel(channel_id: int, user_id: int=None, user_model: User = None, *,
     try:
         _channel = Channel.objects.get({'channelId': channel_id})
         if _channel.is_deleted:
-            _channel.is_deleted = False
-            _channel.deleted_date = None
-            _channel.save()
-            return edit_channel_info(channel_id, title=title, description=description, username=username,
+            Channel.objects.raw({'channelId'}).update({'$set': {'isDeleted': False}, '$unset': {'deletedDate': ''}})
+            return edit_channel_info(channel_id=channel_id, title=title, description=description, username=username,
                                      private_link=private_link, photo_id=photo_id)
     except Channel.DoesNotExist:
         try:
@@ -78,12 +76,14 @@ def add_channel(channel_id: int, user_id: int=None, user_model: User = None, *,
             raise
 
 
-def add_admins(channel_id: int, *, user_model: User = None, user_models: List[User] = None,
+def add_admins(channel_model: Channel = None, channel_id: int = None, *,
+               user_model: User = None,  user_models: List[User] = None,
                admin_model: ChannelAdmin = None, admin_models: List[ChannelAdmin] = None) -> bool:
     """
     Adds admins (secondary content creators) to a channel, and gives those authorization to handle certain things in
     the given channel.
-    :param channel_id: Telegram's ID of the channel itself
+    :param channel_model: Model instance of a channel in the database
+    :param channel_id: Telegram's ID of the channel itself. Only used if `channel_model` is None
     :param user_model: A [User] instance to be added to the authorized admins.
     :param user_models: A list of [User] instances to be added to the authorized admins.
     :param admin_model: A [ChannelAdmin] instance to be added to the authorized admins.
@@ -93,7 +93,7 @@ def add_admins(channel_id: int, *, user_model: User = None, user_models: List[Us
     """
 
     try:
-        channel = get_channels(channel_id=channel_id)
+        channel = channel_model if channel_model is not None else get_channels(channel_id=channel_id)
         _admins_to_add: List[ChannelAdmin] = []
 
         if user_model is not None:
@@ -130,11 +130,12 @@ def add_admins(channel_id: int, *, user_model: User = None, user_models: List[Us
     return True
 
 
-def remove_admins(channel_id: int, *, user_model: User = None,
+def remove_admins(channel_model: Channel = None, channel_id: int = None, *, user_model: User = None,
                   user_models: List[User] = None) -> bool:
     """
     Remove admins from the authorized admins from a given channel.
-    :param channel_id: Telegram's ID of the channel itself
+    :param channel_model: Model instance of a channel in the database
+    :param channel_id: Telegram's ID of the channel itself. Only used if `channel_model` is None
     :param user_model: A [User] instance to be removed from the authorization list
     :param user_models: A list of [User] instances to be removed from the authorization list
     :return: True if the admins were removed, False if no [User] instance were given. Raises [DoesNotExist] in case the
@@ -142,7 +143,7 @@ def remove_admins(channel_id: int, *, user_model: User = None,
     """
 
     try:
-        channel = get_channels(channel_id=channel_id)
+        channel = channel_model if channel_model is not None else get_channels(channel_id=channel_id)
 
         if user_model is not None:
             for _admin in channel.authorized_admins:
@@ -167,11 +168,13 @@ def remove_admins(channel_id: int, *, user_model: User = None,
         raise
 
 
-def edit_channel_info(channel_id: int, *, title: str = None, description: str = None,
+def edit_channel_info(channel_model: Channel = None, channel_id: int = None, *,
+                      title: str = None, description: str = None,
                       username: str = None, private_link: str = None, photo_id: str = None)-> Channel:
     """
     Helper to edit a channel info in the database
-    :param channel_id: Telegram's ID of the channel itself
+    :param channel_model: Model instance of a channel in the database
+    :param channel_id: Telegram's ID of the channel itself. Only used if `channel_model` is None
     :param title: A title of the channel, provided in Telegram
     :param description: A description of the channel, provided in Telegram
     :param username: An username (also used as public link) of the channel, provided in Telegram
@@ -181,7 +184,7 @@ def edit_channel_info(channel_id: int, *, title: str = None, description: str = 
     """
 
     try:
-        channel = get_channels(channel_id=channel_id)
+        channel = channel_model if channel_model is not None else get_channels(channel_id=channel_id)
 
         if title is not None:
             channel.title = title
@@ -204,15 +207,16 @@ def edit_channel_info(channel_id: int, *, title: str = None, description: str = 
         raise
 
 
-def delete_channel(channel_id: int)-> bool:
+def delete_channel(channel_model: Channel = None, channel_id: int = None)-> bool:
     """
     Delete a channel from the database, using it's Telegram's ID, by setting the deleted flag.
-    :param channel_id: Telegram's ID
+    :param channel_model: Model instance of a channel in the database
+    :param channel_id: Telegram's ID of the channel itself. Only used if `channel_model` is None
     :return: True if deleted, False if channel has never been added,  or the Exception raised by the data validation
             (less likely to happen).
     """
     try:
-        channel = get_channels(channel_id=channel_id)
+        channel = channel_model if channel_model is not None else get_channels(channel_id=channel_id)
         channel.is_deleted = True
         channel.deleted_date = datetime.datetime.now()
 
