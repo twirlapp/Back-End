@@ -21,10 +21,29 @@
 # SUCH DAMAGES.
 #
 
-from flask.views import MethodView
+from concurrent.futures import ThreadPoolExecutor
+from typing import Callable, Awaitable
+import asyncio
+from functools import partial
 
 
-class Posts(MethodView):
+__all__ = ['to_async']
 
-    def get(self, ):
-        pass
+
+# Inspired by https://github.com/django/asgiref/blob/master/asgiref/sync.py
+class _AsyncFunctionHandler:
+    """
+    A helper class to create Awaitable functions from synchronous functions.
+    """
+
+    def __init__(self, func: Callable):
+        self.func = func
+        self.loop = asyncio.get_event_loop()
+        self.loop.set_default_executor(ThreadPoolExecutor())
+
+    async def __call__(self, *args, **kwargs)-> Awaitable:
+        future = self.loop.run_in_executor(None, partial(self.func, *args, **kwargs))
+        return await asyncio.wait_for(future, timeout=None)
+
+
+to_async = _AsyncFunctionHandler

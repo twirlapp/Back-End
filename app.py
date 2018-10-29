@@ -21,13 +21,17 @@
 # SUCH DAMAGES.
 #
 
-from flask import Flask
+from quart import Quart, request, url_for
+from blueprints.tpages_api import users_handler
 
-app = Flask(__name__)
+app = Quart(__name__, host_matching=True, static_host='myloc.al')
+app.config['SERVER_NAME'] = 'myloc.al:5000'
+app.register_blueprint(users_handler.users_api)
 
 
 @app.route('/')
-def hello_world():
+async def hello_world():
+    print(await request.get_json())
     return 'Hello World!'
 
 

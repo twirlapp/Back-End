@@ -25,14 +25,14 @@ from ..models.post_models import ImagePost, TextPost, AnimationPost, AudioPost
 from ..models.post_models import VideoPost, VoicePost, VideoNotePost, DocumentPost, PostModel
 from ..models.post_models import Posts, Link, LinkList, GlobalPostAnalytics
 from ..models.reactions_model import Reaction
-from ..models.user_model import User
+from ..models.user_models import User
 from ..models.channels_model import Channel
 from ..models.comments_model import Comment
 from .user_controllers import get_users
 from .channel_controllers import get_channels
-from typing import List, Union, Dict
-from ..utils.generator_utils import id_generator, hash_generator
-from .reaction_controllers import add_reaction
+from typing import List, Union, Dict, Iterable
+from ..utils.security import id_generator, hash_generator
+from .reaction_controllers import create_reaction
 import datetime
 
 
@@ -65,7 +65,7 @@ def add_post_group(posts: List[PostModel],
             posts_hash=posts_hash,
             creator=creator,
             channel=channel,
-            date_created=datetime.datetime.now(),
+            date_created=datetime.datetime.utcnow(),
             posts=post_strings
         )
         if _posts.is_valid():
@@ -98,12 +98,12 @@ def remove_post_group(group_model: Posts = None, group_hash: str = None)-> bool:
     try:
         posts_group = group_model if group_model is not None else get_post_group(group_hash=group_hash)
         posts_group.is_deleted = True
-        posts_group.deleted_date = datetime.datetime.now()
+        posts_group.deleted_date = datetime.datetime.utcnow()
         _comments = Comment.objects.raw({'postReference': {'$in': posts_group.posts}})
         _reactions = Reaction.objects.raw({'postId': {'$in': posts_group.posts}})
         if posts_group.is_valid():
-            _comments.update({'$set': {'deletedDate': datetime.datetime.now(), 'isDeleted': True}})
-            _reactions.update({'$set': {'deletedDate': datetime.datetime.now(), 'isDeleted': True}})
+            _comments.update({'$set': {'deletedDate': datetime.datetime.utcnow(), 'isDeleted': True}})
+            _reactions.update({'$set': {'deletedDate': datetime.datetime.utcnow(), 'isDeleted': True}})
             posts_group.post_id.save(full_clean=True)
             return True
         else:
@@ -126,6 +126,7 @@ def get_post_group(group_hash: str)-> Posts:
 
 def add_text_post(user_model: User = None, user_id: int = None,
                   channel_model: Channel = None, channel_id: int = None, *,
+                  message_id: int,
                   text: str,
                   tags: List[str] = None,
                   source: Link = None,
@@ -141,6 +142,7 @@ def add_text_post(user_model: User = None, user_id: int = None,
     :param user_id: Creator of the posts. Should be either it's model, or it's ID
     :param channel_model: Channel to where the posts belongs. Should be either it's model, or it's ID
     :param channel_id: Channel to where the posts belongs. Should be either it's model, or it's ID
+    :param message_id: The Telegram's message ID to identify a message in a channel
     :param text: The text, in unicode format
     :param tags: The tags detected within the Post
     :param source: The source of the Post. This is either a [Link] object, or a dict that maps the data for a [Link]
@@ -166,7 +168,6 @@ def add_text_post(user_model: User = None, user_id: int = None,
             global_analytics = GlobalPostAnalytics.objects.get({'_id': 0})
         except GlobalPostAnalytics.DoesNotExist:
             global_analytics = GlobalPostAnalytics(_id=0, created_posts=0)
-            global_analytics.save()
 
         global_analytics.created_posts += 1
         global_analytics.save()
@@ -190,17 +191,19 @@ def add_text_post(user_model: User = None, user_id: int = None,
             post_id=_id,
             creator=creator,
             channel=channel,
+            message_id=message_id,
             mime_type='text/plain',
             type='text',
-            created_date=datetime.datetime.now(),
-            text=text,
+            created_date=datetime.datetime.utcnow(),
+            text=text
         )
 
         _reactions = None
         if reactions is not None:
             _reactions = reactions
         elif reactions_list is not None or reactions_map is not None:
-            _reactions = add_reaction(text_post, reactions_list=reactions_list, reactions_map=reactions_map)
+            _reactions = create_reaction(  # text_post,
+                                         reactions_list=reactions_list, reactions_map=reactions_map)
 
         if _reactions is not None:
             text_post.reactions = _reactions
@@ -213,8 +216,8 @@ def add_text_post(user_model: User = None, user_id: int = None,
 
         if text_post.is_valid():
             text_post.save(full_clean=True)
-            if _reactions is not None:
-                _reactions.save()
+            global_analytics.added_posts += 1
+            global_analytics.save()
 
         else:
             raise text_post.full_clean()
@@ -229,6 +232,7 @@ def add_text_post(user_model: User = None, user_id: int = None,
 
 def add_image_post(user_model: User = None, user_id: int = None,
                    channel_model: Channel = None, channel_id: int = None, *,
+                   message_id: int,
                    file_id: str,
                    file_size: int,
                    width: int,
@@ -249,6 +253,7 @@ def add_image_post(user_model: User = None, user_id: int = None,
     :param user_id: Creator of the posts. Should be either it's model, or it's ID
     :param channel_model: Channel to where the posts belongs. Should be either it's model, or it's ID
     :param channel_id: Channel to where the posts belongs. Should be either it's model, or it's ID
+    :param message_id: The Telegram's message ID to identify a message in a channel
     :param file_id: The identifier of the file in Telegram's Database
     :param file_size: The size of the file
     :param width: The width of the file
@@ -280,7 +285,6 @@ def add_image_post(user_model: User = None, user_id: int = None,
             global_analytics = GlobalPostAnalytics.objects.get({'_id': 0})
         except GlobalPostAnalytics.DoesNotExist:
             global_analytics = GlobalPostAnalytics(_id=0, created_posts=0)
-            global_analytics.save()
 
         global_analytics.created_posts += 1
         global_analytics.save()
@@ -304,9 +308,10 @@ def add_image_post(user_model: User = None, user_id: int = None,
             post_id=_id,
             creator=creator,
             channel=channel,
+            message_id=message_id,
             mime_type='image/jpeg',
             type='image',
-            created_date=datetime.datetime.now(),
+            created_date=datetime.datetime.utcnow(),
             file_id=file_id,
             file_size=file_size,
             width=width,
@@ -317,7 +322,8 @@ def add_image_post(user_model: User = None, user_id: int = None,
         if reactions is not None:
             _reactions = reactions
         elif reactions_list is not None or reactions_map is not None:
-            _reactions = add_reaction(image_post, reactions_list=reactions_list, reactions_map=reactions_map)
+            _reactions = create_reaction(  # image_post,
+                                         reactions_list=reactions_list, reactions_map=reactions_map)
 
         if _reactions is not None:
             image_post.reactions = _reactions
@@ -336,8 +342,9 @@ def add_image_post(user_model: User = None, user_id: int = None,
 
         if image_post.is_valid():
             image_post.save(full_clean=True)
-            if _reactions is not None:
-                _reactions.save()
+
+            global_analytics.added_posts += 1
+            global_analytics.save()
 
         else:
             raise image_post.full_clean()
@@ -352,6 +359,7 @@ def add_image_post(user_model: User = None, user_id: int = None,
 
 def add_video_post(user_model: User = None, user_id: int = None,
                    channel_model: Channel = None, channel_id: int = None, *,
+                   message_id: int,
                    file_id: str,
                    file_size: int,
                    width: int,
@@ -374,6 +382,7 @@ def add_video_post(user_model: User = None, user_id: int = None,
     :param user_id: Creator of the posts. Should be either it's model, or it's ID
     :param channel_model: Channel to where the posts belongs. Should be either it's model, or it's ID
     :param channel_id: Channel to where the posts belongs. Should be either it's model, or it's ID
+    :param message_id: The Telegram's message ID to identify a message in a channel
     :param file_id: The identifier of the file in Telegram's Database
     :param file_size: The size of the file
     :param width: The width of the file
@@ -407,7 +416,6 @@ def add_video_post(user_model: User = None, user_id: int = None,
             global_analytics = GlobalPostAnalytics.objects.get({'_id': 0})
         except GlobalPostAnalytics.DoesNotExist:
             global_analytics = GlobalPostAnalytics(_id=0, created_posts=0)
-            global_analytics.save()
 
         global_analytics.created_posts += 1
         global_analytics.save()
@@ -431,9 +439,10 @@ def add_video_post(user_model: User = None, user_id: int = None,
             post_id=_id,
             creator=creator,
             channel=channel,
+            message_id=message_id,
             mime_type=mime_type if mime_type is not None else 'video/mp4',
             type='video',
-            created_date=datetime.datetime.now(),
+            created_date=datetime.datetime.utcnow(),
             file_id=file_id,
             file_size=file_size,
             duration=duration,
@@ -445,7 +454,8 @@ def add_video_post(user_model: User = None, user_id: int = None,
         if reactions is not None:
             _reactions = reactions
         elif reactions_list is not None or reactions_map is not None:
-            _reactions = add_reaction(video_post, reactions_list=reactions_list, reactions_map=reactions_map)
+            _reactions = create_reaction(  # video_post,
+                                         reactions_list=reactions_list, reactions_map=reactions_map)
 
         if _reactions is not None:
             video_post.reactions = _reactions
@@ -464,8 +474,9 @@ def add_video_post(user_model: User = None, user_id: int = None,
 
         if video_post.is_valid():
             video_post.save(full_clean=True)
-            if _reactions is not None:
-                _reactions.save()
+
+            global_analytics.added_posts += 1
+            global_analytics.save()
 
         else:
             raise video_post.full_clean()
@@ -480,6 +491,7 @@ def add_video_post(user_model: User = None, user_id: int = None,
 
 def add_video_note_post(user_model: User = None, user_id: int = None,
                         channel_model: Channel = None, channel_id: int = None, *,
+                        message_id: int,
                         file_id: str,
                         file_size: int,
                         length: int,
@@ -501,6 +513,7 @@ def add_video_note_post(user_model: User = None, user_id: int = None,
     :param user_id: Creator of the posts. Should be either it's model, or it's ID
     :param channel_model: Channel to where the posts belongs. Should be either it's model, or it's ID
     :param channel_id: Channel to where the posts belongs. Should be either it's model, or it's ID
+    :param message_id: The Telegram's message ID to identify a message in a channel
     :param file_id: The identifier of the file in Telegram's Database
     :param file_size: The size of the file
     :param length: The file's width and height (diameter of the video message) as defined by sender
@@ -533,7 +546,6 @@ def add_video_note_post(user_model: User = None, user_id: int = None,
             global_analytics = GlobalPostAnalytics.objects.get({'_id': 0})
         except GlobalPostAnalytics.DoesNotExist:
             global_analytics = GlobalPostAnalytics(_id=0, created_posts=0)
-            global_analytics.save()
 
         global_analytics.created_posts += 1
         global_analytics.save()
@@ -557,9 +569,10 @@ def add_video_note_post(user_model: User = None, user_id: int = None,
             post_id=_id,
             creator=creator,
             channel=channel,
+            message_id=message_id,
             mime_type=mime_type if mime_type is not None else 'video/mp4',
             type='video_note',
-            created_date=datetime.datetime.now(),
+            created_date=datetime.datetime.utcnow(),
             file_id=file_id,
             file_size=file_size,
             duration=duration,
@@ -570,7 +583,8 @@ def add_video_note_post(user_model: User = None, user_id: int = None,
         if reactions is not None:
             _reactions = reactions
         elif reactions_list is not None or reactions_map is not None:
-            _reactions = add_reaction(video_note_post, reactions_list=reactions_list, reactions_map=reactions_map)
+            _reactions = create_reaction(  # video_note_post,
+                                         reactions_list=reactions_list, reactions_map=reactions_map)
 
         if _reactions is not None:
             video_note_post.reactions = _reactions
@@ -589,8 +603,9 @@ def add_video_note_post(user_model: User = None, user_id: int = None,
 
         if video_note_post.is_valid():
             video_note_post.save(full_clean=True)
-            if _reactions is not None:
-                _reactions.save()
+
+            global_analytics.added_posts += 1
+            global_analytics.save()
 
         else:
             raise video_note_post.full_clean()
@@ -605,6 +620,7 @@ def add_video_note_post(user_model: User = None, user_id: int = None,
 
 def add_animation_post(user_model: User = None, user_id: int = None,
                        channel_model: Channel = None, channel_id: int = None, *,
+                       message_id: int,
                        file_id: str,
                        file_size: int,
                        width: int,
@@ -628,6 +644,7 @@ def add_animation_post(user_model: User = None, user_id: int = None,
     :param user_id: Creator of the posts. Should be either it's model, or it's ID
     :param channel_model: Channel to where the posts belongs. Should be either it's model, or it's ID
     :param channel_id: Channel to where the posts belongs. Should be either it's model, or it's ID
+    :param message_id: The Telegram's message ID to identify a message in a channel
     :param file_id: The identifier of the file in Telegram's Database
     :param file_size: The size of the file
     :param width: The width of the file
@@ -662,7 +679,6 @@ def add_animation_post(user_model: User = None, user_id: int = None,
             global_analytics = GlobalPostAnalytics.objects.get({'_id': 0})
         except GlobalPostAnalytics.DoesNotExist:
             global_analytics = GlobalPostAnalytics(_id=0, created_posts=0)
-            global_analytics.save()
 
         global_analytics.created_posts += 1
         global_analytics.save()
@@ -686,9 +702,10 @@ def add_animation_post(user_model: User = None, user_id: int = None,
             post_id=_id,
             creator=creator,
             channel=channel,
+            message_id=message_id,
             mime_type=mime_type if mime_type is not None else 'video/mp4',
             type='animation',
-            created_date=datetime.datetime.now(),
+            created_date=datetime.datetime.utcnow(),
             file_id=file_id,
             file_size=file_size,
             duration=duration,
@@ -701,7 +718,8 @@ def add_animation_post(user_model: User = None, user_id: int = None,
         if reactions is not None:
             _reactions = reactions
         elif reactions_list is not None or reactions_map is not None:
-            _reactions = add_reaction(animation_post, reactions_list=reactions_list, reactions_map=reactions_map)
+            _reactions = create_reaction(  # animation_post,
+                                         reactions_list=reactions_list, reactions_map=reactions_map)
 
         if _reactions is not None:
             animation_post.reactions = _reactions
@@ -720,8 +738,9 @@ def add_animation_post(user_model: User = None, user_id: int = None,
 
         if animation_post.is_valid():
             animation_post.save(full_clean=True)
-            if _reactions is not None:
-                _reactions.save()
+
+            global_analytics.added_posts += 1
+            global_analytics.save()
 
         else:
             raise animation_post.full_clean()
@@ -736,6 +755,7 @@ def add_animation_post(user_model: User = None, user_id: int = None,
 
 def add_voice_post(user_model: User = None, user_id: int = None,
                    channel_model: Channel = None, channel_id: int = None, *,
+                   message_id: int,
                    file_id: str,
                    file_size: int,
                    duration: int,
@@ -754,6 +774,7 @@ def add_voice_post(user_model: User = None, user_id: int = None,
     :param user_id: Creator of the posts. Should be either it's model, or it's ID
     :param channel_model: Channel to where the posts belongs. Should be either it's model, or it's ID
     :param channel_id: Channel to where the posts belongs. Should be either it's model, or it's ID
+    :param message_id: The Telegram's message ID to identify a message in a channel
     :param file_id: The identifier of the file in Telegram's Database
     :param file_size: The size of the file
     :param duration: The duration of the file
@@ -783,7 +804,6 @@ def add_voice_post(user_model: User = None, user_id: int = None,
             global_analytics = GlobalPostAnalytics.objects.get({'_id': 0})
         except GlobalPostAnalytics.DoesNotExist:
             global_analytics = GlobalPostAnalytics(_id=0, created_posts=0)
-            global_analytics.save()
 
         global_analytics.created_posts += 1
         global_analytics.save()
@@ -807,9 +827,10 @@ def add_voice_post(user_model: User = None, user_id: int = None,
             post_id=_id,
             creator=creator,
             channel=channel,
+            message_id=message_id,
             mime_type=mime_type if mime_type is not None else 'audio/ogg',
             type='voice',
-            created_date=datetime.datetime.now(),
+            created_date=datetime.datetime.utcnow(),
             file_id=file_id,
             file_size=file_size,
             duration=duration
@@ -819,7 +840,8 @@ def add_voice_post(user_model: User = None, user_id: int = None,
         if reactions is not None:
             _reactions = reactions
         elif reactions_list is not None or reactions_map is not None:
-            _reactions = add_reaction(voice_post, reactions_list=reactions_list, reactions_map=reactions_map)
+            _reactions = create_reaction(  # voice_post,
+                                         reactions_list=reactions_list, reactions_map=reactions_map)
 
         if _reactions is not None:
             voice_post.reactions = _reactions
@@ -834,8 +856,9 @@ def add_voice_post(user_model: User = None, user_id: int = None,
 
         if voice_post.is_valid():
             voice_post.save(full_clean=True)
-            if _reactions is not None:
-                _reactions.save()
+
+            global_analytics.added_posts += 1
+            global_analytics.save()
 
         else:
             raise voice_post.full_clean()
@@ -850,6 +873,7 @@ def add_voice_post(user_model: User = None, user_id: int = None,
 
 def add_audio_post(user_model: User = None, user_id: int = None,
                    channel_model: Channel = None, channel_id: int = None, *,
+                   message_id: int,
                    file_id: str,
                    file_size: int,
                    duration: int,
@@ -872,6 +896,7 @@ def add_audio_post(user_model: User = None, user_id: int = None,
     :param user_id: Creator of the posts. Should be either it's model, or it's ID
     :param channel_model: Channel to where the posts belongs. Should be either it's model, or it's ID
     :param channel_id: Channel to where the posts belongs. Should be either it's model, or it's ID
+    :param message_id: The Telegram's message ID to identify a message in a channel
     :param file_id: The identifier of the file in Telegram's Database
     :param file_size: The size of the file
     :param duration: The duration of the file
@@ -905,7 +930,6 @@ def add_audio_post(user_model: User = None, user_id: int = None,
             global_analytics = GlobalPostAnalytics.objects.get({'_id': 0})
         except GlobalPostAnalytics.DoesNotExist:
             global_analytics = GlobalPostAnalytics(_id=0, created_posts=0)
-            global_analytics.save()
 
         global_analytics.created_posts += 1
         global_analytics.save()
@@ -929,9 +953,10 @@ def add_audio_post(user_model: User = None, user_id: int = None,
             post_id=_id,
             creator=creator,
             channel=channel,
+            message_id=message_id,
             mime_type=mime_type if mime_type is not None else 'audio/mp3',
             type='audio',
-            created_date=datetime.datetime.now(),
+            created_date=datetime.datetime.utcnow(),
             file_id=file_id,
             file_size=file_size,
             duration=duration,
@@ -941,7 +966,8 @@ def add_audio_post(user_model: User = None, user_id: int = None,
         if reactions is not None:
             _reactions = reactions
         elif reactions_list is not None or reactions_map is not None:
-            _reactions = add_reaction(audio_post, reactions_list=reactions_list, reactions_map=reactions_map)
+            _reactions = create_reaction(  # audio_post,
+                                         reactions_list=reactions_list, reactions_map=reactions_map)
 
         if _reactions is not None:
             audio_post.reactions = _reactions
@@ -964,8 +990,9 @@ def add_audio_post(user_model: User = None, user_id: int = None,
 
         if audio_post.is_valid():
             audio_post.save(full_clean=True)
-            if _reactions is not None:
-                _reactions.save()
+
+            global_analytics.added_posts += 1
+            global_analytics.save()
 
         else:
             raise audio_post.full_clean()
@@ -980,6 +1007,7 @@ def add_audio_post(user_model: User = None, user_id: int = None,
 
 def add_file_post(user_model: User = None, user_id: int = None,
                   channel_model: Channel = None, channel_id: int = None, *,
+                  message_id: int,
                   file_id: str,
                   file_size: int,
                   file_name: str = None,
@@ -1000,6 +1028,7 @@ def add_file_post(user_model: User = None, user_id: int = None,
     :param user_id: Creator of the posts. Should be either it's model, or it's ID
     :param channel_model: Channel to where the posts belongs. Should be either it's model, or it's ID
     :param channel_id: Channel to where the posts belongs. Should be either it's model, or it's ID
+    :param message_id: The Telegram's message ID to identify a message in a channel
     :param file_id: The identifier of the file in Telegram's Database
     :param file_size: The size of the file
     :param file_name: The name of the file, as defined by the sender
@@ -1031,7 +1060,6 @@ def add_file_post(user_model: User = None, user_id: int = None,
             global_analytics = GlobalPostAnalytics.objects.get({'_id': 0})
         except GlobalPostAnalytics.DoesNotExist:
             global_analytics = GlobalPostAnalytics(_id=0, created_posts=0)
-            global_analytics.save()
 
         global_analytics.created_posts += 1
         global_analytics.save()
@@ -1055,8 +1083,9 @@ def add_file_post(user_model: User = None, user_id: int = None,
             post_id=_id,
             creator=creator,
             channel=channel,
+            message_id=message_id,
             type='document',
-            created_date=datetime.datetime.now(),
+            created_date=datetime.datetime.utcnow(),
             file_id=file_id,
             file_size=file_size,
         )
@@ -1065,7 +1094,8 @@ def add_file_post(user_model: User = None, user_id: int = None,
         if reactions is not None:
             _reactions = reactions
         elif reactions_list is not None or reactions_map is not None:
-            _reactions = add_reaction(document_post, reactions_list=reactions_list, reactions_map=reactions_map)
+            _reactions = create_reaction(  # document_post,
+                                         reactions_list=reactions_list, reactions_map=reactions_map)
 
         if _reactions is not None:
             document_post.reactions = _reactions
@@ -1088,8 +1118,9 @@ def add_file_post(user_model: User = None, user_id: int = None,
 
         if document_post.is_valid():
             document_post.save(full_clean=True)
-            if _reactions is not None:
-                _reactions.save()
+
+            global_analytics.added_posts += 1
+            global_analytics.save()
 
         else:
             raise document_post.full_clean()
@@ -1113,15 +1144,11 @@ def remove_post(post_model: PostModel = None, post_id: str = None)-> bool:
     try:
         post = post_model if post_model is not None else get_posts(post_id=post_id)
         post.is_deleted = True
-        post.deleted_date = datetime.datetime.now()
+        post.deleted_date = datetime.datetime.utcnow()
         _comments = Comment.objects.raw({'postReference': post.post_id})
-        _reactions = Reaction.objects.raw({'postId': post.post_id})
         if post.is_valid():
-            _comments.update({'$set': {'deletedDate': datetime.datetime.now(), 'isDeleted': True}})
-            _reactions.update({'$set': {'deletedDate': datetime.datetime.now(), 'isDeleted': True}})
+            _comments.update({'$set': {'deletedDate': datetime.datetime.utcnow(), 'isDeleted': True}})
             post.save(full_clean=True)
-            if post.group_hash is not None:
-                Posts.objects.raw({'groupHash': post.group_hash}).update({'$pullAll': {'posts': [post.post_id]}})
             return True
         else:
             raise post.full_clean()
@@ -1129,7 +1156,7 @@ def remove_post(post_model: PostModel = None, post_id: str = None)-> bool:
         return False
 
 
-def get_posts(post_id: str = None, post_ids: List[str] = None)-> Union[PostModel, None]:
+def get_posts(post_id: str = None, post_ids: List[str] = None)-> Union[PostModel, Iterable[PostModel], None]:
     """
     Gets a single post, or an iterable array of posts from the database. Required either `post_id` or `post_ids`
     :param post_id: (Optional) The identifier of a post on the database
@@ -1141,7 +1168,7 @@ def get_posts(post_id: str = None, post_ids: List[str] = None)-> Union[PostModel
         if post_id is not None:
             posts = PostModel.objects.get({'postId': post_id, 'isDeleted': False})
         elif post_ids is not None:
-            posts = PostModel.objects.raw({'postId': {'$in': post_id}, 'isDeleted': False})
+            posts = PostModel.objects.raw({'postId': {'$in': post_ids}, 'isDeleted': False})
         else:
             raise PostModel.DoesNotExist
         return posts

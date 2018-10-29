@@ -22,6 +22,6 @@
 #
 
 from src.controllers import (user_controllers, channel_controllers, comment_controllers,
-                             post_controllers, reaction_controllers)
-
-__all__ = ['user_controllers', 'channel_controllers', 'comment_controllers', 'post_controllers', 'reaction_controllers']
+                             post_controllers, reaction_controllers, app_controllers)
+__all__ = ['user_controllers', 'channel_controllers', 'comment_controllers',
+           'post_controllers', 'reaction_controllers', 'app_controllers']

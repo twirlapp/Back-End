@@ -21,6 +21,6 @@
 # SUCH DAMAGES.
 #
 
-from src.models import (channels_model, comments_model, post_models, reactions_model, user_model)
+from src.models import (channels_model, comments_model, post_models, reactions_model, user_models)
 
-__all__ = ['channels_model', 'comments_model', 'post_models', 'reactions_model', 'user_model']
+__all__ = ['channels_model', 'comments_model', 'post_models', 'reactions_model', 'user_models.py']

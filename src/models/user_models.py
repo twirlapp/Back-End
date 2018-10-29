@@ -37,14 +37,14 @@ def validate_username(username: str)-> None:
 
 
 class User(MongoModel):
-    _id = fields.IntegerField(required=True, primary_key=True)
-    uid = fields.IntegerField(required=True, verbose_name='user_id', mongo_name='userId')
+    _id = fields.BigIntegerField(required=True, primary_key=True)
+    uid = fields.BigIntegerField(required=True, verbose_name='user_id', mongo_name='userId')
     first_name = fields.CharField(verbose_name='user_first_name', mongo_name='firstName', default=None)
     last_name = fields.CharField(verbose_name='user_first_name', mongo_name='lastName', default=None)
     username = fields.CharField(verbose_name='user_username',
                                 mongo_name='userUsername', default=None, validators=[validate_username])
     is_deleted = fields.BooleanField(verbose_name='user_is_deleted', mongo_name='isDeleted', default=False)
-    join_date = fields.DateTimeField(verbose_name='user_join_date', mongo_name='joinedDate')
+    join_date = fields.DateTimeField(verbose_name='user_join_date', mongo_name='joinedDate', required=True)
     deleted_date = fields.DateTimeField(verbose_name='user_deleted_date', mongo_name='deletedDate', default=None)
 
     class Meta:
@@ -57,5 +57,33 @@ class User(MongoModel):
         indexes = [
             IndexModel('userUsername', name='usernameIndex', unique=True, sparse=True),
             IndexModel('userId', name='userIdIndex', unique=True, sparse=True)
+        ]
+        ignore_unknown_fields = True
+
+
+class Bot(MongoModel):
+    _id = fields.BigIntegerField(required=True, primary_key=True)
+    bot_token = fields.CharField(required=True, verbose_name='bot_token', mongo_name='botToken')
+    bot_id = fields.BigIntegerField(required=True, verbose_name='bot_id', mongo_name='botId')
+    name = fields.CharField(verbose_name='bot_name', mongo_name='botName', default=None)
+    username = fields.CharField(verbose_name='bot_username',
+                                mongo_name='botUsername', default=None, validators=[validate_username])
+    creator = fields.ReferenceField(User, on_delete=fields.ReferenceField.CASCADE, verbose_name='creator',
+                                    mongo_name='creator', required=True)
+    is_deleted = fields.BooleanField(verbose_name='bot_is_deleted', mongo_name='isDeleted', default=False)
+    join_date = fields.DateTimeField(verbose_name='bot_join_date', mongo_name='joinedDate', required=True)
+    deleted_date = fields.DateTimeField(verbose_name='bot_deleted_date', mongo_name='deletedDate', default=None)
+
+    class Meta:
+        connection_alias = 'Users'
+        collection_name = 'bots'
+        cascade = True
+        write_concern = wc.WriteConcern(j=True)
+        read_preference = ReadPreference.NEAREST
+        read_concern = rc.ReadConcern(level='majority')
+        indexes = [
+            IndexModel('botUsername', name='botUsernameIndex', unique=True, sparse=True),
+            IndexModel('userId', name='botIdIndex', unique=True, sparse=True),
+            IndexModel('botToken', name='botTokenIndex', unique=True, sparse=True)
         ]
         ignore_unknown_fields = True

@@ -21,11 +21,15 @@
 # SUCH DAMAGES.
 #
 
-from ..models.user_model import User
+from ..models.user_models import User, Bot
 from ..models.channels_model import Channel, ChannelAdmin
 import datetime
 from typing import List, Union, Iterable
-from .user_controllers import get_users
+from .user_controllers import get_users, get_bots
+
+
+class ChannelAlreadyAdded(BaseException):
+    pass
 
 
 def add_channel(channel_id: int, user_id: int=None, user_model: User = None, *,
@@ -33,7 +37,7 @@ def add_channel(channel_id: int, user_id: int=None, user_model: User = None, *,
                 private_link: str = None, photo_id: str = None) -> Union[Channel, bool]:
     """
     Adds a channel to the database. A channel can not be added if there is no owner for it.
-    :param user_id: Telegram's ID of the channel owner
+    :param user_id: Telegram's ID of the channel owner. Only used if `user_model` is None
     :param user_model: [User] instance from the database
     :param channel_id: Telegram's ID of the channel itself
     :param title: A title of the channel, provided in Telegram
@@ -50,21 +54,28 @@ def add_channel(channel_id: int, user_id: int=None, user_model: User = None, *,
             Channel.objects.raw({'channelId'}).update({'$set': {'isDeleted': False}, '$unset': {'deletedDate': ''}})
             return edit_channel_info(channel_id=channel_id, title=title, description=description, username=username,
                                      private_link=private_link, photo_id=photo_id)
+        else:
+            raise ChannelAlreadyAdded('Channel is already added.')
     except Channel.DoesNotExist:
         try:
-            owner = user_model if user_model is not None else get_users(user_id=user_id)
+            creator = user_model if user_model is not None else get_users(user_id=user_id)
 
             channel = Channel(
                 _id=channel_id,
                 chid=channel_id,
                 title=title,
-                description=description,
-                username=username,
-                private_link=private_link,
-                photo_id=photo_id,
-                owner=owner,
-                added_date=datetime.datetime.now()
+                creator=creator,
+                added_date=datetime.datetime.utcnow()
             )
+
+            if description is not None:
+                channel.description = description
+            if username is not None:
+                channel.username = username
+            if private_link is not None:
+                channel.private_link = private_link
+            if photo_id is not None:
+                channel.photo_id = photo_id
             if channel.is_valid():
                 channel.save(full_clean=True)
             else:
@@ -99,7 +110,7 @@ def add_admins(channel_model: Channel = None, channel_id: int = None, *,
         if user_model is not None:
             _new_admin = ChannelAdmin(
                 uid=user_model,
-                admin_since=datetime.datetime.now()
+                admin_since=datetime.datetime.utcnow()
             )
             _admins_to_add.append(_new_admin)
 
@@ -107,7 +118,7 @@ def add_admins(channel_model: Channel = None, channel_id: int = None, *,
             for _user in user_models:
                 _new_admin = ChannelAdmin(
                     uid=_user,
-                    admin_since=datetime.datetime.now()
+                    admin_since=datetime.datetime.utcnow()
                 )
                 _admins_to_add.append(_new_admin)
 
@@ -168,6 +179,49 @@ def remove_admins(channel_model: Channel = None, channel_id: int = None, *, user
         raise
 
 
+def edit_channel_bot(user_model: User = None, user_id: int = None,
+                     channel_model: Channel = None, channel_id: int = None, *,
+                     bot_model: Bot = None, bot_id: int = None, bot_token: str = None)-> bool:
+    """
+    Edits the channel bot in said channel. Only the creator can do such operation.
+    :param user_model: [User] instance of the owner from the database
+    :param user_id: Telegram's ID of the channel owner. Only used if `user_model` is None
+    :param channel_model: [Channel] instance of the channel from the database
+    :param channel_id: Telegram's ID of the channel. Only used if `channel_model` is None
+    :param bot_model: [Bot] instance of the bot to be added / replaced. Passing None means removing the bot from the
+                      channel.
+    :param bot_id: Telegram bot's ID. Only used if `bot_model` is None. Passing None means removing the bot from the
+                   channel.
+    :param bot_token: Telegram's API access token. Only used if `bot_model` is None.  Passing None means removing the
+                      bot from the channel.
+    :return: True if the addition / edition / deletion of the bot in the channel was successful. False if something
+             happened, like the user isn't the creator. Raises `DoesNotExist` if either the user, the channel or the bot
+             doesn't exist at all.
+    """
+    try:
+        user = user_model if user_model is not None else get_users(user_id=user_id)
+        channel = channel_model if channel_model is not None else get_channels(channel_id=channel_id)
+
+        if channel.creator == user.uid:
+            if bot_model is None and bot_id is None and bot_token is None:
+                Channel.objects.raw({'channelId': channel_id}).update({'$unset': {'channelBot': None}})
+                return True
+            else:
+                bot = bot_model if bot_model is not None else get_bots(bot_id=bot_id, bot_token=bot_token)
+                channel.channel_bot = bot
+                channel.save()
+                return True
+        else:
+            return False
+
+    except User.DoesNotExist:
+        raise
+    except Channel.DoesNotExist:
+        raise
+    except Bot.DoesNotExist:
+        raise
+
+
 def edit_channel_info(channel_model: Channel = None, channel_id: int = None, *,
                       title: str = None, description: str = None,
                       username: str = None, private_link: str = None, photo_id: str = None)-> Channel:
@@ -218,7 +272,7 @@ def delete_channel(channel_model: Channel = None, channel_id: int = None)-> bool
     try:
         channel = channel_model if channel_model is not None else get_channels(channel_id=channel_id)
         channel.is_deleted = True
-        channel.deleted_date = datetime.datetime.now()
+        channel.deleted_date = datetime.datetime.utcnow()
 
         if channel.is_valid():
             channel.save(full_clean=True)

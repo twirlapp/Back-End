@@ -23,7 +23,7 @@
 
 from pymodm import fields, MongoModel, EmbeddedMongoModel, connect
 from pymongo import write_concern as wc, read_concern as rc, IndexModel, ReadPreference
-from ..models.user_model import User
+from ..models.user_models import User
 from ..models.post_models import PostModel
 from .config import *
 
@@ -31,13 +31,14 @@ connect(f'{MONGO_URI}/comments', alias='Comments', ssl=USE_SSL, username=DB_ADMI
 
 
 class CommentRank(EmbeddedMongoModel):
-    rank_up_count = fields.IntegerField(verbose_name='rank_up_count', mongo_name='upCount', min_value=0,
-                                        default=0)
-    rank_down_count = fields.IntegerField(verbose_name='rank_down_count', mongo_name='downCount', min_value=0,
-                                          default=0)
+    rank_up_count = fields.BigIntegerField(verbose_name='rank_up_count', mongo_name='upCount', min_value=0,
+                                           default=0)
+    rank_down_count = fields.BigIntegerField(verbose_name='rank_down_count', mongo_name='downCount', min_value=0,
+                                             default=0)
 
 
-class Comment(MongoModel):
+class BaseComment(MongoModel):
+
     _id = fields.CharField(required=True, primary_key=True)
     user_id = fields.ReferenceField(User, on_delete=fields.ReferenceField.CASCADE,
                                     verbose_name='user_id', mongo_name='userId', required=True)
@@ -48,9 +49,6 @@ class Comment(MongoModel):
     created_date = fields.DateTimeField(required=True, verbose_name='comment_created_date', mongo_name='createdDate')
     is_deleted = fields.BooleanField(verbose_name='is_deleted', mongo_name='isDeleted', default=False)
     deleted_date = fields.DateTimeField(verbose_name='comment_deleted_date', mongo_name='deletedDate', default=None)
-    reply_to = fields.CharField(verbose_name='reply_to', mongo_name='replyTo', default=None)
-    rank = fields.EmbeddedDocumentField(CommentRank, verbose_name='rank', mongo_name='rank', required=True)
-    rank_position = fields.FloatField(verbose_name='rank_position', mongo_name='rankPosition', default=0.0)
 
     class Meta:
         connection_alias = 'Comments'
@@ -60,13 +58,21 @@ class Comment(MongoModel):
         read_preference = ReadPreference.NEAREST
         read_concern = rc.ReadConcern(level='majority')
         indexes = [
-            IndexModel('userId', name='commentUserIdIndex', unique=True, sparse=True),
-            IndexModel('commentId', name='commentIdIndex', unique=True, sparse=True)
+            IndexModel('userId', name='commentUserIdIndex', sparse=True),
+            IndexModel('commentId', name='commentIdIndex', unique=True, sparse=True),
+            IndexModel('postReference', name='postReferenceIndex', sparse=True),
+            IndexModel('replyTo', name='replyToReferenceIndex', sparse=True),
+            IndexModel('rankPosition', name='rankPositionIndex', sparse=True)
         ]
         ignore_unknown_fields = True
 
 
-class CommentReply(Comment):
+class Comment(BaseComment):
+    rank = fields.EmbeddedDocumentField(CommentRank, verbose_name='rank', mongo_name='rank', required=True)
+    rank_position = fields.FloatField(verbose_name='rank_position', mongo_name='rankPosition', default=0.0)
+
+
+class CommentReply(BaseComment):
     reply_to = fields.ReferenceField(Comment, on_delete=fields.ReferenceField.CASCADE,
                                      verbose_name='reply_to', mongo_name='replyTo', required=True)
 

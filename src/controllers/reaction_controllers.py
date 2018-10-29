@@ -21,22 +21,20 @@
 # SUCH DAMAGES.
 #
 
-from ..models.post_models import PostModel
-from ..models.user_model import User
+# from ..models.post_models import PostModel
+from ..models.user_models import User
 from ..models.reactions_model import Reaction, ReactionObj, UserReaction
 from typing import List, Union, Dict
-from ..utils.generator_utils import id_generator
+# from ..utils.generator_utils import id_generator
 import datetime
 
 
-def add_reaction(post: PostModel,
-                 reactions_list: List[str] = None,
-                 reactions_map: List[Union[Dict[str, str], Dict[str, int]]] = None) -> Union[Reaction, None]:
+def create_reaction(reactions_list: List[str] = None,
+                    reactions_map: List[Union[Dict[str, str], Dict[str, int]]] = None) -> Union[Reaction, None]:
     """
-
-    :param post:
-    :param reactions_list:
-    :param reactions_map:
+    Creates a reaction Model.
+    :param reactions_list: A list of emojis to create a reaction model
+    :param reactions_map: A dict of emojis and starter counts to create a reaction model
     :return:
     """
     _reactions = None
@@ -61,13 +59,10 @@ def add_reaction(post: PostModel,
                 _reactions.append(_reaction_obj)
 
     if _reactions is not None:
-        _id = post.post_id + id_generator(4, use_hex=True)
+        # _id = post.post_id + id_generator(4, use_hex=True)
         reaction_obj = Reaction(
-            _id=_id,
-            reaction_id=_id,
-            post=post,
-            created_date=datetime.datetime.now(),
-            total_count=0
+            total_count=0,
+            reactions=_reactions
         )
         return reaction_obj
     return _reactions
@@ -89,7 +84,7 @@ def remove_reaction(reaction_id: str = None, post_id: str = None)-> bool:
         else:
             return False
         reaction.is_deleted = True
-        reaction.deleted_date = datetime.datetime.now()
+        reaction.deleted_date = datetime.datetime.utcnow()
         if reaction.is_valid():
             reaction.save(full_clean=True)
         else:
@@ -130,7 +125,7 @@ def user_reaction(user_model: User = None, user_id: int = None, *, reaction_id: 
     try:
         user = user_model.uid if user_model is not None else user_id
         reaction = get_reaction(reaction_id=reaction_id)
-        now = datetime.datetime.now()
+        now = datetime.datetime.utcnow()
 
         try:
             _usr_reaction = UserReaction.objects.get({'userId': user, 'reactionId': reaction_id})

@@ -26,7 +26,7 @@ from pymongo import write_concern as wc, read_concern as rc, IndexModel, ReadPre
 from .config import *
 from .post_models import BasePostModel as PostModel
 
-connect(f'{MONGO_URI}/reactions', alias='Reactions', ssl=USE_SSL,
+connect(f'{MONGO_URI}/posts', alias='Posts', ssl=USE_SSL,
         username=DB_ADMIN_USERNAME, password=DB_ADMIN_PASSWORD)
 
 
@@ -36,17 +36,17 @@ class ReactionObj(EmbeddedMongoModel):
                                 default=0)
 
 
-class Reaction(MongoModel):
+class Reaction(EmbeddedMongoModel):
     """
 
     """
-    _id = fields.CharField(required=True, primary_key=True)
-    reaction_id = fields.CharField(required=True, verbose_name='reaction_id', mongo_name='reactionId')
+    """_id = fields.CharField(required=True, primary_key=True)
+    reaction_id = fields.CharField(required=True, verbose_name='reaction_id', mongo_name='reactionId')"""
     reactions = fields.EmbeddedDocumentListField(ReactionObj, verbose_name='reactions_list', mongo_name='reactions')
-    post = fields.ReferenceField(PostModel, on_delete=fields.ReferenceField.CASCADE,
+    total_count = fields.BigIntegerField(required=True, verbose_name='total_count', mongo_name='totalCount',
+                                         min_value=0, default=0)
+    """post = fields.ReferenceField(PostModel, on_delete=fields.ReferenceField.CASCADE,
                                  verbose_name='post_id', mongo_name='postId')
-    total_count = fields.IntegerField(required=True, verbose_name='total_count', mongo_name='totalCount', min_value=0,
-                                      default=0)
     created_date = fields.DateTimeField(required=True, verbose_name='reaction_created_date', mongo_name='createdDate')
     is_deleted = fields.BooleanField(verbose_name='post_is_deleted', mongo_name='isDeleted', default=False)
     deleted_date = fields.DateTimeField(verbose_name='post_deleted_date', mongo_name='deletedDate', default=None)
@@ -63,31 +63,30 @@ class Reaction(MongoModel):
             IndexModel('postId', name='reactionPostIdIndex', unique=True, sparse=True),
             IndexModel('createdDate', name='reactionCreatedDateIndex', unique=True, sparse=True)
         ]
-        ignore_unknown_fields = True
+        ignore_unknown_fields = True"""
 
 
 class UserReaction(MongoModel):
     """
 
     """
-    user_id = fields.IntegerField(verbose_name='user_id', mongo_name='userId', required=True)
-    reaction_id = fields.ReferenceField(Reaction, on_delete=fields.ReferenceField.CASCADE,
-                                        verbose_name='reaction_id', mongo_name='reactionId', required=True)
+    user_id = fields.BigIntegerField(verbose_name='user_id', mongo_name='userId', required=True)
+    post = fields.ReferenceField(PostModel, on_delete=fields.ReferenceField.CASCADE,
+                                 verbose_name='reaction_id', mongo_name='reactionId', required=True)
     reaction_index = fields.IntegerField(required=True, verbose_name='reaction_index', mongo_name='reactionIndex',
                                          min_value=0, max_value=3)
     reaction_date = fields.DateTimeField(required=True, verbose_name='reaction_date', mongo_name='reactionDate')
 
     class Meta:
-        connection_alias = 'Reactions'
-        collection_name = 'user_reactions'
+        connection_alias = 'Posts'
+        collection_name = 'reactions'
         cascade = True
         write_concern = wc.WriteConcern(j=True)
         read_preference = ReadPreference.NEAREST
         read_concern = rc.ReadConcern(level='majority')
         indexes = [
-            IndexModel('userId', name='userReactionUserIdIndex', unique=True, sparse=True),
-            IndexModel('reactionId', name='userReactionReactionIdIndex', unique=True, sparse=True),
-            IndexModel('reactionIndex', name='userReactionReactionIndexIndex', unique=True, sparse=True),
-            IndexModel('reactionDate', name='userReactionDateIndex', unique=True, sparse=True)
+            IndexModel('userId', name='userReactionUserIdIndex', sparse=True),
+            IndexModel('reactionIndex', name='userReactionReactionIndexIndex', sparse=True),
+            IndexModel('reactionDate', name='userReactionDateIndex', sparse=True)
         ]
         ignore_unknown_fields = True

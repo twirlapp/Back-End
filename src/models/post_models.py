@@ -24,8 +24,9 @@
 from pymodm import fields, MongoModel, EmbeddedMongoModel, connect
 from pymongo import write_concern as wc, read_concern as rc, IndexModel, ReadPreference
 from .channels_model import Channel
-from .user_model import User
+from .user_models import User
 from .config import *
+
 
 connect(f'{MONGO_URI}/posts', alias='Posts', ssl=USE_SSL, username=DB_ADMIN_USERNAME, password=DB_ADMIN_PASSWORD)
 
@@ -40,9 +41,11 @@ class GlobalPostAnalytics(MongoModel):
                                           min_value=0, default=0)
     deleted_posts = fields.BigIntegerField(required=True, verbose_name='deleted_posts', mongo_name='deletedPosts',
                                            min_value=0, default=0)
+    global_reactions = fields.BigIntegerField(required=True, verbose_name='global_reactions',
+                                              mongo_name='globalReactions', min_value=0, default=0)
 
     class Meta:
-        collection_alias = 'Posts'
+        connection_alias = 'Posts'
         collection_name = 'global_analytics'
         cascade = True
         write_concern = wc.WriteConcern(j=True)
@@ -77,7 +80,6 @@ class PostModel(BasePostModel):
     Generic Post Model, should not be directly used, there are
     fields that needs to be implemented for normal Posts.
     """
-
     message_id = fields.BigIntegerField(required=True, verbose_name='post_message_id', mongo_name='messageId')
     mime_type = fields.CharField(verbose_name='post_mime_type', mongo_name='mimeType', default=None)
     type = fields.CharField(verbose_name='post_type', mongo_name='type', required=True,
@@ -89,8 +91,8 @@ class PostModel(BasePostModel):
     tags = fields.ListField(field=fields.CharField(), verbose_name='tags', mongo_name='tags', default=None)
     source = fields.EmbeddedDocumentField(Link, verbose_name='source', mongo_name='source', default=None)
     links = fields.EmbeddedDocumentField(LinkList, verbose_name='links', mongo_name='links', default=None)
-    reactions = fields.EmbeddedDocumentListField(Reaction, verbose_name='reactions', mongo_name='reactions',
-                                                 default=None)
+    reactions = fields.EmbeddedDocumentField(Reaction, verbose_name='reactions', mongo_name='reactions',
+                                             default=None)
     is_deleted = fields.BooleanField(verbose_name='post_is_deleted', mongo_name='isDeleted', default=False)
     deleted_date = fields.DateTimeField(verbose_name='post_deleted_date', mongo_name='deletedDate', default=None)
 
@@ -102,12 +104,12 @@ class PostModel(BasePostModel):
         read_preference = ReadPreference.NEAREST
         read_concern = rc.ReadConcern(level='majority')
         indexes = [
-            IndexModel('creator', name='postCreatorIndex', unique=True, sparse=True),
+            IndexModel('creator', name='postCreatorIndex', sparse=True),
             IndexModel('postId', name='postIdIndex', unique=True, sparse=True),
             IndexModel('groupHash', name='postGroupHashIndex', unique=True, sparse=True),
-            IndexModel('messageId', name='postMessageIdIndex', unique=True, sparse=True),
-            IndexModel('channelId', name='postChannelIdIndex', unique=True, sparse=True),
-            IndexModel('createdDate', name='postCreatedDateIndex', unique=True, sparse=True)
+            IndexModel('messageId', name='postMessageIdIndex', sparse=True),
+            IndexModel('channelId', name='postChannelIdIndex', sparse=True),
+            IndexModel('createdDate', name='postCreatedDateIndex', sparse=True)
         ]
         ignore_unknown_fields = True
 
@@ -189,9 +191,9 @@ class Posts(MongoModel):
         read_concern = rc.ReadConcern(level='majority')
         indexes = [
             IndexModel('groupHash', name='postListGroupHashIndex', unique=True, sparse=True),
-            IndexModel('creator', name='postListCreatorIndex', unique=True, sparse=True),
-            IndexModel('posts', name='postListIndex', unique=True, sparse=True),
-            IndexModel('channelId', name='postListChannelIdIndex', unique=True, sparse=True),
-            IndexModel('creationDate', name='postListCreatedDateIndex', unique=True, sparse=True)
+            IndexModel('creator', name='postListCreatorIndex', sparse=True),
+            IndexModel('posts', name='postListIndex', sparse=True),
+            IndexModel('channelId', name='postListChannelIdIndex', sparse=True),
+            IndexModel('creationDate', name='postListCreatedDateIndex', sparse=True)
         ]
         ignore_unknown_fields = True

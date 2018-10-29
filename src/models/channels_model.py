@@ -24,7 +24,7 @@
 from pymodm import fields, MongoModel, EmbeddedMongoModel, connect
 from pymongo import write_concern as wc, read_concern as rc, IndexModel, ReadPreference
 from re import compile
-from ..models.user_model import User
+from ..models.user_models import User, Bot
 from .config import *
 
 connect(f'{MONGO_URI}/channels', alias='Channels', ssl=USE_SSL, username=DB_ADMIN_USERNAME, password=DB_ADMIN_PASSWORD)
@@ -63,6 +63,8 @@ class Channel(MongoModel):
     photo_id = fields.CharField(verbose_name='channel_photo', mongo_name='channelPhoto', default=None)
     creator = fields.ReferenceField(User, on_delete=fields.ReferenceField.CASCADE,
                                     verbose_name='channel_creator', mongo_name='channelCreator', required=True)
+    channel_bot = fields.ReferenceField(Bot, on_delete=fields.ReferenceField.NULLIFY, verbose_name='channel_bot',
+                                        mongo_name='channelBot', default=None)
     authorized_admins = fields.EmbeddedDocumentListField(ChannelAdmin,
                                                          verbose_name='authorized_channel_admins',
                                                          mongo_name='channelAdmins')
@@ -80,7 +82,8 @@ class Channel(MongoModel):
         indexes = [
             IndexModel('channelUsername', name='channelUsernameIndex', unique=True, sparse=True),
             IndexModel('channelId', name='channelIdIndex', unique=True, sparse=True),
-            IndexModel('channelCreator', name='channelCreatorIndex', unique=True, sparse=True),
-            IndexModel('channelAdmins', name='channelAdminsIndex', unique=True, sparse=True)
+            IndexModel('channelCreator', name='channelCreatorIndex', sparse=True),
+            IndexModel('channelAdmins', name='channelAdminsIndex', sparse=True),
+            IndexModel('channelBot', name='channelBotIndex', sparse=True)
         ]
         ignore_unknown_fields = True

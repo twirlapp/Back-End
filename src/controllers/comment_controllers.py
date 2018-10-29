@@ -22,11 +22,11 @@
 #
 
 from ..models.comments_model import Comment, CommentReply, CommentRank, UserGivenCommentRank
-from ..models.user_model import User
+from ..models.user_models import User
 from ..models.post_models import PostModel
 from .user_controllers import get_users
-from .post_controllers import get_post
-from ..utils.generator_utils import id_generator
+from .post_controllers import get_posts
+from ..utils.security import id_generator
 from typing import Union
 from pymongo import DESCENDING
 from math import sqrt
@@ -34,7 +34,7 @@ import datetime
 
 
 def add_comment(user_model: User = None, user_id: int = None, post_model: PostModel = None, post_id: int = None, *,
-                comment: str, reply_to_model: Comment = None, reply_to_id: int = None)-> Union[Comment, CommentReply]:
+                comment: str, reply_to_model: Comment = None, reply_to_id: str = None)-> Union[Comment, CommentReply]:
     """
     Adds a comment to the database.
     :param user_model: User reference model to identify the user
@@ -48,13 +48,16 @@ def add_comment(user_model: User = None, user_id: int = None, post_model: PostMo
     """
     try:
         user = user_model if user_model is not None else get_users(user_id=user_id)
-        post = post_model if post_model is not None else get_post(post_id=post_id)
+        post = post_model if post_model is not None else get_posts(post_id=post_id)
         try:
-            reply_to = reply_to_model if reply_to_model is not None else get_comments(comment_id=reply_to_id)
+            if reply_to_model is not None or reply_to_id is not None:
+                reply_to = reply_to_model if reply_to_model is not None else get_comments(comment_id=reply_to_id)
+            else:
+                reply_to = None
         except Comment.DoesNotExist:
             reply_to = None
 
-        _id = post.post_id + id_generator(12, use_hex=True)
+        _id = post.post_id + id_generator(16, use_hex=True)
         comment_rank = CommentRank(
             rank_up_count=0,
             rank_down_count=0,
@@ -66,9 +69,8 @@ def add_comment(user_model: User = None, user_id: int = None, post_model: PostMo
                 _id=_id,
                 comment_id=_id,
                 user_id=user,
-                created_date=datetime.datetime.now(),
+                created_date=datetime.datetime.utcnow(),
                 reply_to=reply_to,
-                rank=comment_rank,
                 comment=comment,
                 belongs_to=post
             )
@@ -77,7 +79,7 @@ def add_comment(user_model: User = None, user_id: int = None, post_model: PostMo
                 _id=_id,
                 comment_id=_id,
                 user_id=user,
-                created_date=datetime.datetime.now(),
+                created_date=datetime.datetime.utcnow(),
                 rank=comment_rank,
                 comment=comment,
                 belongs_to=post
@@ -128,11 +130,11 @@ def delete_comment(comment_model: Comment = None, comment_id: str = None)-> bool
         if comment.reply_to is None:
             try:
                 replies = CommentReply.objects.raw({'replyTo': comment.comment_id, 'isDeleted': False})
-                replies.update({'$set': {'deletedDate': datetime.datetime.now(), 'isDeleted': True}})
+                replies.update({'$set': {'deletedDate': datetime.datetime.utcnow(), 'isDeleted': True}})
             except CommentReply.DoesNotExist:
                 pass
         comment.is_deleted = True
-        comment.deleted_date = datetime.datetime.now()
+        comment.deleted_date = datetime.datetime.utcnow()
         if comment.is_valid():
             comment.save(full_clean=True)
             return True
@@ -160,7 +162,7 @@ def get_comments(comment_id: str = None,
         if comment_id is not None:
             comments = Comment.objects.get({'commentId': comment_id, 'replyTo': None})
         else:
-            post = post_model if post_model is not None else get_post(post_id=post_id)
+            post = post_model if post_model is not None else get_posts(post_id=post_id)
             if user_model is not None or user_id is not None:
                 user = user_model if user_model is not None else get_users(user_id=user_id)
                 comments = Comment.objects.raw({'belongsTo': post.post_id, 'userId': user.uid, 'replyTo': None})
@@ -227,14 +229,14 @@ def rank_comment(user_model: User = None, user_id: int = None, *, rank_type: str
                             comment.rank.rank_down_count -= 1
                         comment.rank.rank_up_count += 1
                     user_rank.rank_type = rank_type
-                    user_rank.rank_date = datetime.datetime.now()
+                    user_rank.rank_date = datetime.datetime.utcnow()
 
         except UserGivenCommentRank.DoesNotExist:
             user_rank = UserGivenCommentRank(
                 user_id=user,
                 comment_ranked=comment,
                 rank_type=rank_type,
-                rank_date=datetime.datetime.now()
+                rank_date=datetime.datetime.utcnow()
 
             )
             if rank_type == 'up':
