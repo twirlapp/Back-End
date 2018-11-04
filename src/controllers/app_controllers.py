@@ -22,13 +22,13 @@
 #
 
 from ..utils.security import id_generator, hash_generator
+from ..utils.function_handlers import to_async, async_lru
 from pymodm import connect, MongoModel, fields, EmbeddedMongoModel
 from pymongo import write_concern as wc, read_concern as rc, IndexModel, ReadPreference
 from ..models.config import *
 from typing import Union
 import datetime
 import bcrypt
-from functools import lru_cache
 
 connect(f'{MONGO_URI}/app', alias='Application', ssl=USE_SSL, username=DB_ADMIN_USERNAME, password=DB_ADMIN_PASSWORD)
 
@@ -86,9 +86,9 @@ class __ApplicationAdministration(MongoModel):
         ignore_unknown_fields = True
 
 
-def create_app(manager_first_name: str, manager_last_name: str,
-               manager_email: str, password: str,
-               manager_phone_number: str = None, new_password: str = None) -> Application:
+async def create_app(manager_first_name: str, manager_last_name: str,
+                     manager_email: str, password: str,
+                     manager_phone_number: str = None, new_password: str = None) -> Application:
     """
     Creates an application and adds it to the database.
     :param manager_first_name: The first name of the app manager
@@ -108,7 +108,7 @@ def create_app(manager_first_name: str, manager_last_name: str,
     if manager_phone_number is not None:
         manager.phone_number = manager_phone_number
 
-    _app = get_app(manager_email=manager_email)
+    _app = await get_app(manager_email=manager_email)
 
     if _app is not None:
         _app.manager = manager
@@ -124,7 +124,8 @@ def create_app(manager_first_name: str, manager_last_name: str,
             _app.app_hash = hash_generator(_app.app_hash + new_salt.decode())
             _app.app_secure = bcrypt.hashpw((new_password + _app.app_hash).encode(), new_salt)
             is_app_authorized.cache_clear()
-        _app.save()
+        save = to_async(_app.save)
+        await save()
         return _app
     else:
         try:
@@ -149,13 +150,15 @@ def create_app(manager_first_name: str, manager_last_name: str,
             valid_until=_now + datetime.timedelta(days=365)
         )
         if _app.is_valid():
-            _app.save(full_clean=True)
+            save = to_async(_app.save)
+            await save(full_clean=True)
             return _app
         else:
             raise _app.full_clean()
 
 
-def get_app(app_id: int=None, app_hash: str=None, manager_email=None)-> Union[Application, None]:
+@async_lru(max_size=32)
+async def get_app(app_id: int=None, app_hash: str=None, manager_email=None)-> Union[Application, None]:
     """
     Gets the app from the database
     :param app_id: The unique Identifier of the app
@@ -164,63 +167,69 @@ def get_app(app_id: int=None, app_hash: str=None, manager_email=None)-> Union[Ap
     :return: [Application] instance of the app, or None
     """
     try:
-        app = Application.objects.get({'$or': [{'appId': app_id},
-                                               {'appHash': app_hash},
-                                               {'appManager.email': manager_email}],
-                                       'isDeleted': False})
+        get = to_async(Application.objects.get)
+        app = await get({'$or': [{'appId': app_id},
+                                 {'appHash': app_hash},
+                                 {'appManager.email': manager_email}],
+                         'isDeleted': False})
         return app
     except Application.DoesNotExist:
         return None
 
 
-@lru_cache(maxsize=32)
-def is_app_authorized(app_hash: str)-> bool:
+@async_lru(max_size=32)
+async def is_app_authorized(app_hash: str)-> bool:
     """
     Checks if an app has authorization to use the API. Lazy but actually secure and functional approach.
     :param app_hash: The unique Hash of the app
     :return: True if the app is valid and authorized, False if the app doesn't exist / isn't authorized / isn't valid
     """
-    app = get_app(app_hash=app_hash)
+    app = await get_app(app_hash=app_hash)
     if app is not None and app.app_is_valid:
         return True
     else:
         return False
 
 
-def remove_app_authorization(app_id: int, app_hash: str)-> bool:
+@async_lru(max_size=32)
+async def remove_app_authorization(app_id: int, app_hash: str)-> bool:
     """
     Removes authorization of an app
     :param app_id: The unique Identifier of the app
     :param app_hash: The unique Hash of the app
     :return: True if the app is no longer authorized, False if the app doesn't exist
     """
-    app = get_app(app_id=app_id, app_hash=app_hash)
+    app = await get_app(app_id=app_id, app_hash=app_hash)
     if app is not None:
         app.app_is_valid = False
-        app.save()
+        save = to_async(app.save)
+        await save()
         return True
     else:
         return False
 
 
-def _remove_app(app_id: int, app_hash: str)-> bool:
+@async_lru(max_size=8)
+async def _remove_app(app_id: int, app_hash: str)-> bool:
     """
     INTERNAL USE ONLY. Removes an app, by setting the deleted flag True.
     :param app_id: The unique Identifier of the app
     :param app_hash: The unique Hash of the app
     :return: True if the app is removed, False if the app never existed
     """
-    app = get_app(app_id=app_id, app_hash=app_hash)
+    app = await get_app(app_id=app_id, app_hash=app_hash)
     if app is not None:
         app.is_deleted = True
         app.deleted_date = datetime.datetime.utcnow()
-        app.save()
+        save = to_async(app.save)
+        await save()
         return True
     else:
         return False
 
 
-def remove_app(app_id: int, app_hash: str, password: str)-> bool:
+@async_lru(max_size=32)
+async def remove_app(app_id: int, app_hash: str, password: str)-> bool:
     """
     Removes an app, with user authorization, by setting the deleted flag True.
     :param app_id: The unique Identifier of the app
@@ -228,12 +237,13 @@ def remove_app(app_id: int, app_hash: str, password: str)-> bool:
     :param password: Password to give authorization for this procedure
     :return: True if the app is removed, False if the app never existed. Raise ValueError if there is no authorization.
     """
-    app = get_app(app_id=app_id, app_hash=app_hash)
+    app = await get_app(app_id=app_id, app_hash=app_hash)
     if app is not None:
         if bcrypt.checkpw(password, app.app_secure):
             app.is_deleted = True
             app.deleted_date = datetime.datetime.utcnow()
-            app.save()
+            save = to_async(app.save)
+            await save()
             return True
         else:
             raise ValueError('Password doesn\'t match.')

@@ -22,10 +22,14 @@
 #
 
 from src.controllers.app_controllers import is_app_authorized
-from src.utils.json_handlers import api_response
+from src.utils.json_handlers import api_response, SuperDict
+from src.utils.security import hash_generator
 from functools import wraps
-from quart import request, Response
+from quart import Response, request
 from typing import Callable
+from threading import Thread
+import time
+import config
 
 
 def app_auth_required(func: Callable):
@@ -38,14 +42,31 @@ def app_auth_required(func: Callable):
         _auth = headers.get('Authorization', None)
         auth: str = _auth if _auth is not None else request.authorization
         if auth is None or (len(auth.split(' ')) < 2) or not is_app_authorized(auth.split(' ')[1]):
-            return_data = await api_response(success=False, op=func.__name__, msg="Unauthorized Application")
+            return_data = await api_response(success=False, op=func.__name__, msg="Unauthorized Application.",
+                                             error='#APP_NOT_AUTHORIZED')
             return Response(return_data, status=401, mimetype='application/json', content_type='application/json', )
         else:
             return await func(*args, **kwargs)
     return decorator
 
 
-JSON_CONTENT_TYPES = ('application/json', 'Application/Json', )
+def user_auth_required(func: Callable):
+    """
+    Decorator to require user authentication.
+    """
+    @wraps(func)
+    async def decorator(*args, **kwargs):
+        headers = request.headers
+        auth_hash = headers.get('Auth-Hash', None)
+        user_id = headers.get('User-Id', None)
+        if (user_id is None and auth_hash is None) or (user_id is None or auth_hash is None) or \
+                auth_hash != hash_generator(str(user_id) + str(config.APP_TEMP_SECRET_KEY), hash_type='sha256'):
+            return_data = await api_response(False, op=func.__name__, msg='User access not authenticated.',
+                                             error='#USER_ACCESS_NOT_AUTHENTICATED')
+            return Response(return_data, status=403, mimetype='application/json', content_type='application/json', )
+        else:
+            return await func(*args, **kwargs)
+    return decorator
 
 
 def json_content_type_required(func: Callable):
@@ -59,7 +80,90 @@ def json_content_type_required(func: Callable):
         content_type = _ct if _ct is not None else request.content_type
         if content_type is None or content_type.lower() != 'application/json':
             return_data = await api_response(success=False, op="add_users", msg="Invalid Content Type")
-            return Response(return_data, status=400, mimetype='application/json', content_type='application/json', )
+            return Response(return_data, status=415, mimetype='application/json', content_type='application/json', )
         else:
             return await func(*args, **kwargs)
     return decorator
+
+
+async def error_response(op: str, stack_trace: str)-> Response:
+    """
+    Utility function to return an API response containing the error that happened
+    :param op: The operation that failed
+    :param stack_trace: The stack trace of the exception
+    :return: Response with http status 500 and additional JSON data
+    """
+    return_data = await api_response(success=False, op=op, msg="Internal Server Error",
+                                     stack_trace=stack_trace)
+    return Response(return_data, status=500, mimetype='application/json', content_type='application/json', )
+
+
+class request_limit:
+    """
+    Object made to limit the requests per time to live
+    """
+
+    def __init__(self, max_requests, ttl=60*5):
+        self._data = SuperDict({})
+        self.max_requests = max_requests
+        self.ttl = ttl
+        thread = Thread(target=self.__collector, daemon=True)
+        thread.start()
+
+    def __call__(self, func):
+        @wraps(func)
+        async def decorator(*args, **kwargs):
+            headers = request.headers
+            auth_hash = headers.get('Auth-Hash', None)
+            user_id = headers.get('User-Id', None)
+            if (auth_hash is None and user_id is None) or (auth_hash is None or user_id is None):
+                return_data = await api_response(False, op=func.__name__, msg='No user authentication.',
+                                                 error='#USER_ACCESS_NOT_AUTHENTICATED')
+                return Response(return_data, status=403, mimetype='application/json',
+                                content_type='application/json', )
+            elif auth_hash != hash_generator(str(user_id) + str(config.APP_TEMP_SECRET_KEY), hash_type='sha256'):
+                return_data = await api_response(False, op=func.__name__,
+                                                 msg='User not Authenticated.',
+                                                 error='#USER_ACCESS_NOT_AUTHENTICATED')
+                return Response(return_data, status=403, mimetype='application/json',
+                                content_type='application/json', )
+            else:
+                now = time.time()
+                if auth_hash not in self._data:
+                    u = {
+                        'start': now,
+                        'ttl': self.ttl,
+                        'request_quantity': 1
+                    }
+                    self._data[auth_hash] = SuperDict(u)
+                cached_request = self._data[auth_hash]
+                if cached_request.request_quantity > self.max_requests and \
+                        now < (cached_request.start + cached_request.ttl):
+                    return_data = await api_response(False, op=func.__name__, msg='Request limit reached.',
+                                                     wait=int((cached_request.start + cached_request.ttl) - now))
+                    return Response(return_data, status=429, mimetype='application/json',
+                                    content_type='application/json', )
+                else:
+                    if now > (cached_request.start + cached_request.ttl):
+                        cached_request.start = now
+                        cached_request.request_quantity = 0
+
+                    cached_request.request_quantity += 1
+
+                    return await func(*args, **kwargs)
+        return decorator
+
+    def __collector(self):
+        """
+        A collector that cleans the cached data every 30 minutes
+        """
+        while True:
+            del_keys = []
+            for k, v in self._data.items():
+                now = time.time()
+                if now > v.start + v.ttl:
+                    del_keys.append(k)
+
+            for key in del_keys:
+                del self._data[key]
+            time.sleep((60*30))

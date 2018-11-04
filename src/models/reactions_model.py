@@ -40,30 +40,9 @@ class Reaction(EmbeddedMongoModel):
     """
 
     """
-    """_id = fields.CharField(required=True, primary_key=True)
-    reaction_id = fields.CharField(required=True, verbose_name='reaction_id', mongo_name='reactionId')"""
     reactions = fields.EmbeddedDocumentListField(ReactionObj, verbose_name='reactions_list', mongo_name='reactions')
     total_count = fields.BigIntegerField(required=True, verbose_name='total_count', mongo_name='totalCount',
                                          min_value=0, default=0)
-    """post = fields.ReferenceField(PostModel, on_delete=fields.ReferenceField.CASCADE,
-                                 verbose_name='post_id', mongo_name='postId')
-    created_date = fields.DateTimeField(required=True, verbose_name='reaction_created_date', mongo_name='createdDate')
-    is_deleted = fields.BooleanField(verbose_name='post_is_deleted', mongo_name='isDeleted', default=False)
-    deleted_date = fields.DateTimeField(verbose_name='post_deleted_date', mongo_name='deletedDate', default=None)
-
-    class Meta:
-        connection_alias = 'Reactions'
-        collection_name = 'reactions'
-        cascade = True
-        write_concern = wc.WriteConcern(j=True)
-        read_preference = ReadPreference.NEAREST
-        read_concern = rc.ReadConcern(level='majority')
-        indexes = [
-            IndexModel('reactionId', name='reactionIdIndex', unique=True, sparse=True),
-            IndexModel('postId', name='reactionPostIdIndex', unique=True, sparse=True),
-            IndexModel('createdDate', name='reactionCreatedDateIndex', unique=True, sparse=True)
-        ]
-        ignore_unknown_fields = True"""
 
 
 class UserReaction(MongoModel):
@@ -72,7 +51,7 @@ class UserReaction(MongoModel):
     """
     user_id = fields.BigIntegerField(verbose_name='user_id', mongo_name='userId', required=True)
     post = fields.ReferenceField(PostModel, on_delete=fields.ReferenceField.CASCADE,
-                                 verbose_name='reaction_id', mongo_name='reactionId', required=True)
+                                 verbose_name='post_id', mongo_name='postId', required=True)
     reaction_index = fields.IntegerField(required=True, verbose_name='reaction_index', mongo_name='reactionIndex',
                                          min_value=0, max_value=3)
     reaction_date = fields.DateTimeField(required=True, verbose_name='reaction_date', mongo_name='reactionDate')
@@ -87,6 +66,7 @@ class UserReaction(MongoModel):
         indexes = [
             IndexModel('userId', name='userReactionUserIdIndex', sparse=True),
             IndexModel('reactionIndex', name='userReactionReactionIndexIndex', sparse=True),
-            IndexModel('reactionDate', name='userReactionDateIndex', sparse=True)
+            IndexModel('reactionDate', name='userReactionDateIndex', sparse=True),
+            IndexModel('postId', name='postIdIndex', sparse=True)
         ]
         ignore_unknown_fields = True

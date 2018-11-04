@@ -43,9 +43,12 @@ class User(MongoModel):
     last_name = fields.CharField(verbose_name='user_first_name', mongo_name='lastName', default=None)
     username = fields.CharField(verbose_name='user_username',
                                 mongo_name='userUsername', default=None, validators=[validate_username])
+    profile_photo = fields.CharField(verbose_name='user_profile_photo', mongo_name='profilePhoto', default=None)
+    profile_thumbnail = fields.CharField(verbose_name='user_profile_thumbnail', mongo_name='profileThumb', default=None)
     is_deleted = fields.BooleanField(verbose_name='user_is_deleted', mongo_name='isDeleted', default=False)
     join_date = fields.DateTimeField(verbose_name='user_join_date', mongo_name='joinedDate', required=True)
     deleted_date = fields.DateTimeField(verbose_name='user_deleted_date', mongo_name='deletedDate', default=None)
+    user_secure = fields.BinaryField(required=True, verbose_name='user_secure', mongo_name='secure')
 
     class Meta:
         connection_alias = 'Users'
@@ -65,11 +68,13 @@ class Bot(MongoModel):
     _id = fields.BigIntegerField(required=True, primary_key=True)
     bot_token = fields.CharField(required=True, verbose_name='bot_token', mongo_name='botToken')
     bot_id = fields.BigIntegerField(required=True, verbose_name='bot_id', mongo_name='botId')
+    owner = fields.ReferenceField(User, on_delete=fields.ReferenceField.CASCADE, verbose_name='owner',
+                                  mongo_name='owner', required=True)
     name = fields.CharField(verbose_name='bot_name', mongo_name='botName', default=None)
     username = fields.CharField(verbose_name='bot_username',
                                 mongo_name='botUsername', default=None, validators=[validate_username])
-    creator = fields.ReferenceField(User, on_delete=fields.ReferenceField.CASCADE, verbose_name='creator',
-                                    mongo_name='creator', required=True)
+    profile_photo = fields.CharField(verbose_name='user_profile_photo', mongo_name='profilePhoto', default=None)
+    profile_thumbnail = fields.CharField(verbose_name='user_profile_thumbnail', mongo_name='profileThumb', default=None)
     is_deleted = fields.BooleanField(verbose_name='bot_is_deleted', mongo_name='isDeleted', default=False)
     join_date = fields.DateTimeField(verbose_name='bot_join_date', mongo_name='joinedDate', required=True)
     deleted_date = fields.DateTimeField(verbose_name='bot_deleted_date', mongo_name='deletedDate', default=None)

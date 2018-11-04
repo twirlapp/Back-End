@@ -48,42 +48,34 @@ async def decode(*args, **kwargs)-> Union[Awaitable, dict]:
     return await decoder(*args, **kwargs)
 
 
-class SuperDict:
+class SuperDict(dict):
     """
     A helper class to parse normal Python dicts as an object, so it's keys are obtainable using attributes.
     """
-    data = {}
+    __dict__ = {}
 
-    def __init__(self, data_dict: dict, __rcall=0):
+    def __init__(self, data_dict: dict, rcall=0):
         """
         :param data_dict: Python dict to be used in here.
         """
+        super().__init__(data_dict)
         for k, v in data_dict.items():
             if isinstance(v, dict):
-                self.__parse_dict(data_dict=data_dict, __rcall=__rcall)
-            self.data[k] = v
+                if rcall < 5:
+                    v = SuperDict(v, rcall=rcall+1)
+            self[k] = v
 
     def __getattr__(self, item):
-        return self.data.get(item, None)
+        return self.get(item, None)
 
     def __setattr__(self, key, value):
-        self.data[key] = value
+        if isinstance(value, dict):
+            value = SuperDict(value, rcall=1)
+        self[key] = value
 
     def __delattr__(self, item):
-        if item in self.data:
-            del self.data[item]
-
-    @staticmethod
-    def __parse_dict(data_dict: dict, __rcall):
-        """
-        Parses a Python dict to SuperDict
-        :param data_dict: Python dict to be parsed
-        :return: SuperDict instance of the dict map
-        """
-        if __rcall > 5:
-            return data_dict
-        else:
-            return SuperDict(data_dict=data_dict, __rcall=__rcall)
+        if item in self:
+            del self[item]
 
 
 async def api_response(success: bool, op: str, msg: str = None, **kwargs)-> Union[Awaitable, str]:
@@ -97,9 +89,10 @@ async def api_response(success: bool, op: str, msg: str = None, **kwargs)-> Unio
     """
     result = {
         'success': success,
-        'op': op,
-        'msg': msg
+        'op': op
     }
+    if msg is not None:
+        result['msg'] = msg
     for k, v in kwargs.items():
         result[k] = v
 
@@ -112,14 +105,17 @@ async def api_request(data: str)-> Union[SuperDict, List[SuperDict]]:
     :param data: The serialized JSON data
     :return: [SuperDict] instance of the parsed data
     """
+    # noinspection PyBroadException
+    try:
+        _deserialized_data = await decode(data)
+        if isinstance(_deserialized_data, list):
+            deserialized_data = []
+            for item in _deserialized_data:
+                deserialized_data.append(SuperDict(item))
 
-    _deserialized_data = await decode(data)
-    if isinstance(_deserialized_data, list):
-        deserialized_data = []
-        for item in _deserialized_data:
-            deserialized_data.append(SuperDict(item))
+        else:
+            deserialized_data = _deserialized_data
 
-    else:
-        deserialized_data = _deserialized_data
-
-    return SuperDict(deserialized_data)
+        return SuperDict(deserialized_data)
+    except Exception:
+        return SuperDict({})

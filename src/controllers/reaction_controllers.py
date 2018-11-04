@@ -21,14 +21,17 @@
 # SUCH DAMAGES.
 #
 
-# from ..models.post_models import PostModel
 from ..models.user_models import User
+from ..models.post_models import PostModel
+from .post_controllers import get_posts
+from ..utils.function_handlers import to_async
 from ..models.reactions_model import Reaction, ReactionObj, UserReaction
 from typing import List, Union, Dict
-# from ..utils.generator_utils import id_generator
 import datetime
+from functools import lru_cache
 
 
+@lru_cache(maxsize=2048)
 def create_reaction(reactions_list: List[str] = None,
                     reactions_map: List[Union[Dict[str, str], Dict[str, int]]] = None) -> Union[Reaction, None]:
     """
@@ -68,109 +71,68 @@ def create_reaction(reactions_list: List[str] = None,
     return _reactions
 
 
-def remove_reaction(reaction_id: str = None, post_id: str = None)-> bool:
-    """
-    Remove a reaction from the database.
-    :param reaction_id: The reaction identifier
-    :param post_id: The post in which this reaction belongs. Only used if `reaction_id` is None
-    :return: True if deleted, False if the user was never added, or the Exception raised by the data validation
-             (less likely to happen).
-    """
-    try:
-        if reaction_id is not None:
-            reaction = get_reaction(reaction_id=reaction_id)
-        elif post_id is not None:
-            reaction = get_reaction(post_id=post_id)
-        else:
-            return False
-        reaction.is_deleted = True
-        reaction.deleted_date = datetime.datetime.utcnow()
-        if reaction.is_valid():
-            reaction.save(full_clean=True)
-        else:
-            raise reaction.full_clean()
-    except Reaction.DoesNotExist:
-        return False
-
-
-def get_reaction(reaction_id: str = None, post_id: str = None)-> Union[Reaction, None]:
-    """
-    Gets a reaction from the database.
-    :param reaction_id: The reaction identifier
-    :param post_id: The post in which this reaction belongs. Only used if `reaction_id` is None
-    :return: A [Reaction] instance, or None, if the reaction doesn't exist.
-    """
-    try:
-        if reaction_id is not None:
-            reaction = Reaction.objects.get({'reactionId': reaction_id, 'isDeleted': False})
-        elif post_id is not None:
-            reaction = Reaction.objects.get({'postId': post_id, 'isDeleted': False})
-        else:
-            reaction = None
-
-        return reaction
-    except Reaction.DoesNotExist:
-        return None
-
-
-def user_reaction(user_model: User = None, user_id: int = None, *, reaction_id: str, index: int)-> UserReaction:
+async def user_reaction(user_model: User = None, user_id: int = None, *, post_id: str, index: int)-> UserReaction:
     """
     Adds or edits a user reaction in the database.
     :param user_model: user reference model to identify the reaction.
     :param user_id: Telegram's user ID. Used only if `user_model` is None
-    :param reaction_id: The identifier of the reaction
+    :param post_id: The identifier of the post
     :param index: The index of the reaction emoji the user reacted.
     :return: [UserReaction] instance proving the success of the transaction
     """
     try:
         user = user_model.uid if user_model is not None else user_id
-        reaction = get_reaction(reaction_id=reaction_id)
+        post = await get_posts(post_id=post_id)
         now = datetime.datetime.utcnow()
-
+        get = to_async(UserReaction.objects.get)
         try:
-            _usr_reaction = UserReaction.objects.get({'userId': user, 'reactionId': reaction_id})
+            _usr_reaction = await get({'userId': user, 'postId': post.post_id})
             _old_index = _usr_reaction.reaction_index
             _usr_reaction.reaction_index = index
             _usr_reaction.reaction_date = now
-            reaction.reactions[_old_index] -= 1
-            reaction.total_count -= 1
+            post.reactions.reactions[_old_index] -= 1
+            post.reactions.total_count -= 1
         except UserReaction.DoesNotExist:
             _usr_reaction = UserReaction(
                 user_id=user,
-                reaction_id=reaction,
+                post=post,
                 reaction_index=index,
                 reaction_date=now
             )
         if _usr_reaction.is_valid():
-            _usr_reaction.save(full_clean=True)
-            reaction.reactions[index] += 1
-            reaction.total_count += 1
-            reaction.save()
+            reaction_save = to_async(_usr_reaction.save)
+            await reaction_save(full_clean=True)
+            post.reactions.reactions[index] += 1
+            post.reactions.total_count += 1
+            save_post = to_async(post.save)
+            await save_post()
             return _usr_reaction
         else:
             raise _usr_reaction.full_clean()
 
-    except Reaction.DoesNotExist:
+    except PostModel.DoesNotExist:
         raise
 
 
-def remove_user_reaction(user_model: User = None, user_id: int = None, *, reaction_id: str)-> bool:
+def remove_user_reaction(user_model: User = None, user_id: int = None, *, post_id: str)-> bool:
     """
     Removes a reaction given by an user.
     :param user_model: user reference model to identify the reaction.
     :param user_id: Telegram's user ID. Used only if `user_model` is None
-    :param reaction_id: The identifier of the reaction
+    :param post_id: The identifier of the post
     :return: True if deleted, False if the user was never added, or the Exception raised by the data validation
              (less likely to happen).
     """
     try:
         user = user_model.uid if user_model is not None else user_id
-        reaction = get_reaction(reaction_id=reaction_id)
-        _usr_reaction = UserReaction.objects.get({'userId': user, 'reactionId': reaction_id})
-        reaction.reactions[_usr_reaction.reaction_index] -= 1
-        reaction.total_count -= 1
-        reaction.save()
-        _usr_reaction.delete()
+        post = await get_posts(post_id=post_id)
+        save = to_async(post.save)
+        _usr_reaction = UserReaction.objects.get({'userId': user, 'postId': post_id})
+        delete = to_async(_usr_reaction.delete)
+        post.reactions.reactions[_usr_reaction.reaction_index] -= 1
+        post.reactions.total_count -= 1
+        await save()
+        await delete()
         return True
     except UserReaction.DoesNotExist:
         return False

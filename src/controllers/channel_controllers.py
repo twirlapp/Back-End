@@ -22,19 +22,21 @@
 #
 
 from ..models.user_models import User, Bot
+from ..models.post_models import PostModel, Posts
 from ..models.channels_model import Channel, ChannelAdmin
-import datetime
+from ..utils.function_handlers import to_async
 from typing import List, Union, Iterable
 from .user_controllers import get_users, get_bots
+import datetime
 
 
 class ChannelAlreadyAdded(BaseException):
     pass
 
 
-def add_channel(channel_id: int, user_id: int=None, user_model: User = None, *,
-                title: str = '', description: str = None, username: str = None,
-                private_link: str = None, photo_id: str = None) -> Union[Channel, bool]:
+async def add_channel(channel_id: int, user_id: int=None, user_model: User = None, *,
+                      title: str = '', description: str = None, username: str = None,
+                      private_link: str = None, photo_id: str = None) -> Union[Channel, bool]:
     """
     Adds a channel to the database. A channel can not be added if there is no owner for it.
     :param user_id: Telegram's ID of the channel owner. Only used if `user_model` is None
@@ -49,11 +51,12 @@ def add_channel(channel_id: int, user_id: int=None, user_model: User = None, *,
     """
 
     try:
-        _channel = Channel.objects.get({'channelId': channel_id})
+        get = to_async(Channel.objects.get)
+        _channel = await get({'channelId': channel_id})
         if _channel.is_deleted:
             Channel.objects.raw({'channelId'}).update({'$set': {'isDeleted': False}, '$unset': {'deletedDate': ''}})
-            return edit_channel_info(channel_id=channel_id, title=title, description=description, username=username,
-                                     private_link=private_link, photo_id=photo_id)
+            return await edit_channel_info(channel_id=channel_id, title=title, description=description,
+                                           username=username, private_link=private_link, photo_id=photo_id)
         else:
             raise ChannelAlreadyAdded('Channel is already added.')
     except Channel.DoesNotExist:
@@ -77,7 +80,8 @@ def add_channel(channel_id: int, user_id: int=None, user_model: User = None, *,
             if photo_id is not None:
                 channel.photo_id = photo_id
             if channel.is_valid():
-                channel.save(full_clean=True)
+                save = to_async(channel.save)
+                await save(full_clean=True)
             else:
                 raise channel.full_clean()
 
@@ -87,9 +91,9 @@ def add_channel(channel_id: int, user_id: int=None, user_model: User = None, *,
             raise
 
 
-def add_admins(channel_model: Channel = None, channel_id: int = None, *,
-               user_model: User = None,  user_models: List[User] = None,
-               admin_model: ChannelAdmin = None, admin_models: List[ChannelAdmin] = None) -> bool:
+async def add_admins(channel_model: Channel = None, channel_id: int = None, *,
+                     user_model: User = None,  user_models: List[User] = None,
+                     admin_model: ChannelAdmin = None, admin_models: List[ChannelAdmin] = None) -> bool:
     """
     Adds admins (secondary content creators) to a channel, and gives those authorization to handle certain things in
     the given channel.
@@ -104,7 +108,7 @@ def add_admins(channel_model: Channel = None, channel_id: int = None, *,
     """
 
     try:
-        channel = channel_model if channel_model is not None else get_channels(channel_id=channel_id)
+        channel = channel_model if channel_model is not None else await get_channels(channel_id=channel_id)
         _admins_to_add: List[ChannelAdmin] = []
 
         if user_model is not None:
@@ -134,15 +138,15 @@ def add_admins(channel_model: Channel = None, channel_id: int = None, *,
                     channel.authorized_admins.append(_admin)
         else:
             return False
-
-        channel.save(full_clean=True)
+        save = to_async(channel.save)
+        await save(full_clean=True)
     except Channel.DoesNotExist:
         raise
     return True
 
 
-def remove_admins(channel_model: Channel = None, channel_id: int = None, *, user_model: User = None,
-                  user_models: List[User] = None) -> bool:
+async def remove_admins(channel_model: Channel = None, channel_id: int = None, *, user_model: User = None,
+                        user_models: List[User] = None) -> bool:
     """
     Remove admins from the authorized admins from a given channel.
     :param channel_model: Model instance of a channel in the database
@@ -154,7 +158,7 @@ def remove_admins(channel_model: Channel = None, channel_id: int = None, *, user
     """
 
     try:
-        channel = channel_model if channel_model is not None else get_channels(channel_id=channel_id)
+        channel = channel_model if channel_model is not None else await get_channels(channel_id=channel_id)
 
         if user_model is not None:
             for _admin in channel.authorized_admins:
@@ -171,17 +175,17 @@ def remove_admins(channel_model: Channel = None, channel_id: int = None, *, user
 
         else:
             return False
-
-        channel.save()
+        save = to_async(channel.save)
+        await save()
 
         return True
     except Channel.DoesNotExist:
         raise
 
 
-def edit_channel_bot(user_model: User = None, user_id: int = None,
-                     channel_model: Channel = None, channel_id: int = None, *,
-                     bot_model: Bot = None, bot_id: int = None, bot_token: str = None)-> bool:
+async def edit_channel_bot(user_model: User = None, user_id: int = None,
+                           channel_model: Channel = None, channel_id: int = None, *,
+                           bot_model: Bot = None, bot_id: int = None, bot_token: str = None)-> bool:
     """
     Edits the channel bot in said channel. Only the creator can do such operation.
     :param user_model: [User] instance of the owner from the database
@@ -199,17 +203,18 @@ def edit_channel_bot(user_model: User = None, user_id: int = None,
              doesn't exist at all.
     """
     try:
-        user = user_model if user_model is not None else get_users(user_id=user_id)
-        channel = channel_model if channel_model is not None else get_channels(channel_id=channel_id)
+        user = user_model if user_model is not None else await get_users(user_id=user_id)
+        channel = channel_model if channel_model is not None else await get_channels(channel_id=channel_id)
 
         if channel.creator == user.uid:
             if bot_model is None and bot_id is None and bot_token is None:
                 Channel.objects.raw({'channelId': channel_id}).update({'$unset': {'channelBot': None}})
                 return True
             else:
-                bot = bot_model if bot_model is not None else get_bots(bot_id=bot_id, bot_token=bot_token)
+                bot = bot_model if bot_model is not None else await get_bots(bot_id=bot_id, bot_token=bot_token)
                 channel.channel_bot = bot
-                channel.save()
+                save = to_async(channel.save)
+                await save()
                 return True
         else:
             return False
@@ -222,9 +227,9 @@ def edit_channel_bot(user_model: User = None, user_id: int = None,
         raise
 
 
-def edit_channel_info(channel_model: Channel = None, channel_id: int = None, *,
-                      title: str = None, description: str = None,
-                      username: str = None, private_link: str = None, photo_id: str = None)-> Channel:
+async def edit_channel_info(channel_model: Channel = None, channel_id: int = None, *,
+                            title: str = None, description: str = None,
+                            username: str = None, private_link: str = None, photo_id: str = None)-> Channel:
     """
     Helper to edit a channel info in the database
     :param channel_model: Model instance of a channel in the database
@@ -238,7 +243,7 @@ def edit_channel_info(channel_model: Channel = None, channel_id: int = None, *,
     """
 
     try:
-        channel = channel_model if channel_model is not None else get_channels(channel_id=channel_id)
+        channel = channel_model if channel_model is not None else await get_channels(channel_id=channel_id)
 
         if title is not None:
             channel.title = title
@@ -252,7 +257,8 @@ def edit_channel_info(channel_model: Channel = None, channel_id: int = None, *,
             channel.photo_id = photo_id
 
         if channel.is_valid():
-            channel.save(full_clean=True)
+            save = to_async(channel.save)
+            await save(full_clean=True)
             return channel
         else:
             raise channel.full_clean()
@@ -261,7 +267,7 @@ def edit_channel_info(channel_model: Channel = None, channel_id: int = None, *,
         raise
 
 
-def delete_channel(channel_model: Channel = None, channel_id: int = None)-> bool:
+async def delete_channel(channel_model: Channel = None, channel_id: int = None)-> bool:
     """
     Delete a channel from the database, using it's Telegram's ID, by setting the deleted flag.
     :param channel_model: Model instance of a channel in the database
@@ -270,12 +276,22 @@ def delete_channel(channel_model: Channel = None, channel_id: int = None)-> bool
             (less likely to happen).
     """
     try:
-        channel = channel_model if channel_model is not None else get_channels(channel_id=channel_id)
+        now = datetime.datetime.utcnow()
+        channel = channel_model if channel_model is not None else await get_channels(channel_id=channel_id)
         channel.is_deleted = True
-        channel.deleted_date = datetime.datetime.utcnow()
+        channel.deleted_date = now
 
         if channel.is_valid():
-            channel.save(full_clean=True)
+            save = to_async(channel.save)
+            posts_raw = to_async(PostModel.objects.raw)
+            posts_clt_raw = to_async(Posts.objects.raw)
+            posts_clt = await posts_clt_raw({'channelId': channel.chid})
+            all_posts = await posts_raw({'channelId': channel.chid})
+            posts_update = to_async(all_posts.update)
+            posts_clt_update = to_async(posts_clt.update)
+            await posts_update({'isDeleted': True, 'deletedDate': now})
+            await posts_clt_update({'isDeleted': True, 'deletedDate': now})
+            await save(full_clean=True)
             return True
         else:
             raise channel.full_clean()
@@ -284,13 +300,15 @@ def delete_channel(channel_model: Channel = None, channel_id: int = None)-> bool
         return False
 
 
-def get_channels(channel_id: int = None, channel_ids: List[int] = None)-> Union[Channel, Iterable[Channel]]:
+async def get_channels(channel_id: int = None, channel_ids: List[int] = None)-> Union[Channel, Iterable[Channel]]:
     try:
+        get = to_async(Channel.objects.get)
+        raw = to_async(Channel.objects.raw)
         if channel_id is not None:
-            channel = Channel.objects.get({'channelId': channel_id, 'isDeleted': False})
+            channel = await get({'channelId': channel_id, 'isDeleted': False})
             return channel
         elif channel_ids is not None:
-            channels = Channel.objects.raw({'channelId': {'$in': channel_id}, 'isDeleted': False})
+            channels = await raw({'channelId': {'$in': channel_id}, 'isDeleted': False})
             return channels
         else:
             raise Channel.DoesNotExist

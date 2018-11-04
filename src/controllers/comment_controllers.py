@@ -27,14 +27,16 @@ from ..models.post_models import PostModel
 from .user_controllers import get_users
 from .post_controllers import get_posts
 from ..utils.security import id_generator
+from ..utils.function_handlers import to_async, async_lru
 from typing import Union
 from pymongo import DESCENDING
 from math import sqrt
 import datetime
 
 
-def add_comment(user_model: User = None, user_id: int = None, post_model: PostModel = None, post_id: int = None, *,
-                comment: str, reply_to_model: Comment = None, reply_to_id: str = None)-> Union[Comment, CommentReply]:
+async def add_comment(user_model: User = None, user_id: int = None, post_model: PostModel = None, post_id: int = None,
+                      *,  comment: str, reply_to_model: Comment = None,
+                      reply_to_id: str = None)-> Union[Comment, CommentReply]:
     """
     Adds a comment to the database.
     :param user_model: User reference model to identify the user
@@ -47,8 +49,8 @@ def add_comment(user_model: User = None, user_id: int = None, post_model: PostMo
     :return: A [Comment] or [CommentReply] instance of the comment created.
     """
     try:
-        user = user_model if user_model is not None else get_users(user_id=user_id)
-        post = post_model if post_model is not None else get_posts(post_id=post_id)
+        user = user_model if user_model is not None else await get_users(user_id=user_id)
+        post = post_model if post_model is not None else await get_posts(post_id=post_id)
         try:
             if reply_to_model is not None or reply_to_id is not None:
                 reply_to = reply_to_model if reply_to_model is not None else get_comments(comment_id=reply_to_id)
@@ -85,7 +87,8 @@ def add_comment(user_model: User = None, user_id: int = None, post_model: PostMo
                 belongs_to=post
             )
         if comment.is_valid():
-            comment.save(full_clean=True)
+            save = to_async(comment.save)
+            await save(full_clean=True)
             return comment
         else:
             raise comment.full_clean()
@@ -96,8 +99,9 @@ def add_comment(user_model: User = None, user_id: int = None, post_model: PostMo
         raise
 
 
-def edit_comment(comment_model: Union[Comment, CommentReply] = None,
-                 comment_id: str = None, *, new_comment: str)-> Union[Comment, CommentReply]:
+@async_lru(max_size=256)
+async def edit_comment(comment_model: Union[Comment, CommentReply] = None,
+                       comment_id: str = None, *, new_comment: str)-> Union[Comment, CommentReply]:
     """
     Edits a comment in the database.
     :param comment_model: Comment reference model to identify the comment
@@ -106,10 +110,11 @@ def edit_comment(comment_model: Union[Comment, CommentReply] = None,
     :return: A [Comment] or [CommentReply] instance
     """
     try:
-        comment = comment_model if comment_model is not None else get_comments(comment_id=comment_id)
+        comment = comment_model if comment_model is not None else await get_comments(comment_id=comment_id)
         comment.comment = new_comment
         if comment.is_valid():
-            comment.save(full_clean=True)
+            save = to_async(comment.save)
+            await save(full_clean=True)
             return comment
         else:
             raise comment.full_clean()
@@ -117,7 +122,7 @@ def edit_comment(comment_model: Union[Comment, CommentReply] = None,
         raise
 
 
-def delete_comment(comment_model: Comment = None, comment_id: str = None)-> bool:
+async def delete_comment(comment_model: Comment = None, comment_id: str = None)-> bool:
     """
     Deletes the comment, and all the associated replies and ranking votes, or a reply.
     :param comment_model: Comment reference model to identify the comment
@@ -129,24 +134,27 @@ def delete_comment(comment_model: Comment = None, comment_id: str = None)-> bool
         comment = comment_model if comment_model is not None else get_comments(comment_id=comment_id)
         if comment.reply_to is None:
             try:
-                replies = CommentReply.objects.raw({'replyTo': comment.comment_id, 'isDeleted': False})
-                replies.update({'$set': {'deletedDate': datetime.datetime.utcnow(), 'isDeleted': True}})
+                raw_replies = to_async(CommentReply.objects.raw)
+                replies = await raw_replies({'replyTo': comment.comment_id, 'isDeleted': False})
+                update_replies = to_async(replies.update)
+                await update_replies({'$set': {'deletedDate': datetime.datetime.utcnow(), 'isDeleted': True}})
             except CommentReply.DoesNotExist:
                 pass
         comment.is_deleted = True
         comment.deleted_date = datetime.datetime.utcnow()
         if comment.is_valid():
-            comment.save(full_clean=True)
+            save = to_async(comment.save)
+            await save(full_clean=True)
             return True
     except Comment.DoesNotExist:
         return False
 
 
-def get_comments(comment_id: str = None,
-                 post_model: PostModel = None,
-                 post_id: str = None,
-                 user_model: User = None,
-                 user_id: int = None)-> Union[Comment, None]:
+async def get_comments(comment_id: str = None,
+                       post_model: PostModel = None,
+                       post_id: str = None,
+                       user_model: User = None,
+                       user_id: int = None)-> Union[Comment, None]:
     """
     Gets a comment, or the comments from an user.
     :param comment_id: An identifier of the comment
@@ -159,15 +167,17 @@ def get_comments(comment_id: str = None,
     :return: [Comment] instance containing a comment, or an iterable of comments, or None
     """
     try:
+        get = to_async(Comment.objects.get)
+        raw = to_async(Comment.objects.raw)
         if comment_id is not None:
-            comments = Comment.objects.get({'commentId': comment_id, 'replyTo': None})
+            comments = await get({'commentId': comment_id, 'replyTo': None})
         else:
-            post = post_model if post_model is not None else get_posts(post_id=post_id)
+            post = post_model if post_model is not None else await get_posts(post_id=post_id)
             if user_model is not None or user_id is not None:
-                user = user_model if user_model is not None else get_users(user_id=user_id)
-                comments = Comment.objects.raw({'belongsTo': post.post_id, 'userId': user.uid, 'replyTo': None})
+                user = user_model if user_model is not None else await get_users(user_id=user_id)
+                comments = await raw({'belongsTo': post.post_id, 'userId': user.uid, 'replyTo': None})
             else:
-                comments = Comment.objects.raw({'belongsTo': post.post_id, 'replyTo': None})
+                comments = await raw({'belongsTo': post.post_id, 'replyTo': None})
         return comments.sort_by([('rankPosition', DESCENDING)])
     except Comment.DoesNotExist:
         return None
@@ -177,8 +187,9 @@ def get_comments(comment_id: str = None,
         raise
 
 
-def get_replies(comment_model: Comment = None,
-                comment_id: str = None)-> Union[CommentReply, None]:
+@async_lru(max_size=256)
+async def get_replies(comment_model: Comment = None,
+                      comment_id: str = None)-> Union[CommentReply, None]:
     """
     Gets the replies to a given comment.
     :param comment_model: A [Comment] model instance of a comment
@@ -186,8 +197,9 @@ def get_replies(comment_model: Comment = None,
     :return: An iterable of [CommentReply] containing all replies to a comment.
     """
     try:
-        comment = comment_model if comment_model is not None else get_comments(comment_id=comment_id)
-        replies = CommentReply.objects.raw({'replyTo': comment.comment_id})
+        raw = to_async(CommentReply.objects.raw)
+        comment = comment_model if comment_model is not None else await get_comments(comment_id=comment_id)
+        replies = await raw({'replyTo': comment.comment_id})
         return replies.sort([('createdDate', DESCENDING)])
     except Comment.DoesNotExist:
         raise
@@ -195,9 +207,9 @@ def get_replies(comment_model: Comment = None,
         return None
 
 
-def rank_comment(user_model: User = None, user_id: int = None, *, rank_type: str = 'up',
-                 comment_model: Union[Comment, CommentReply] = None,
-                 comment_id: str = None)-> Union[UserGivenCommentRank, None]:
+async def rank_comment(user_model: User = None, user_id: int = None, *, rank_type: str = 'up',
+                       comment_model: Union[Comment, CommentReply] = None,
+                       comment_id: str = None)-> Union[UserGivenCommentRank, None]:
     """
     Gives a rank to a comment. Can give an up or a down. On give a rank, the comment position is re-calculated and
     updated.
@@ -209,10 +221,11 @@ def rank_comment(user_model: User = None, user_id: int = None, *, rank_type: str
     :return: [UserGivenCommentRank] instance of the rank an user gave.
     """
     try:
-        user = user_model if user_model is not None else get_users(user_id=user_id)
-        comment = comment_model if comment_model is not None else get_comments(comment_id=comment_id)
+        user = user_model if user_model is not None else await get_users(user_id=user_id)
+        comment = comment_model if comment_model is not None else await get_comments(comment_id=comment_id)
         try:
-            user_rank = UserGivenCommentRank.objects.get({'userId': user.uid, 'commentId': comment.comment_id})
+            get = to_async(UserGivenCommentRank.objects.get)
+            user_rank = await get({'userId': user.uid, 'commentId': comment.comment_id})
             if user_rank.rank_type != rank_type:
                 if rank_type == 'unrank':
                     if user_rank.rank_type == 'up':
@@ -247,13 +260,16 @@ def rank_comment(user_model: User = None, user_id: int = None, *, rank_type: str
         rank_position = confidence(comment.rank.rank_up_count, comment.rank.rank_down_count)
 
         comment.rank_position = rank_position
-        comment.save()
+        save_comment = to_async(comment.save)
+        await save_comment()
 
         if rank_type == 'unrank':
-            user_rank.delete()
+            delete_rank = to_async(user_rank.delete)
+            await delete_rank()
             return None
         else:
-            user_rank.save(full_clean=True)
+            save_rank = to_async(user_rank.save)
+            await save_rank(full_clean=True)
             return user_rank
 
     except Comment.DoesNotExist:
@@ -269,7 +285,7 @@ def rank_comment(user_model: User = None, user_id: int = None, *, rank_type: str
 # http://www.evanmiller.org/how-not-to-sort-by-average-rating.html
 
 
-def _confidence(ups, downs):
+async def _confidence(ups, downs):
     n = ups + downs
 
     if n == 0:
@@ -285,8 +301,9 @@ def _confidence(ups, downs):
     return (left - right) / under
 
 
-def confidence(ups, downs):
+@async_lru(max_size=2048)
+async def confidence(ups, downs):
     if ups + downs == 0:
         return 0
     else:
-        return _confidence(ups, downs) * 100
+        return await _confidence(ups, downs) * 100

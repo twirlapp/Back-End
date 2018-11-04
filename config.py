@@ -20,24 +20,28 @@
 # EVEN IF SUCH HOLDER OR OTHER PARTY HAS BEEN ADVISED OF THE POSSIBILITY OF
 # SUCH DAMAGES.
 #
+"""
+Some Configurations of the Application.
+"""
 
-from quart import Quart, request, url_for
-from blueprints.tpages_api import users_handler
-from functools import lru_cache
-import gc
+from src.utils.security import id_generator
+import time
+from threading import Thread
 
-gc.enable()
+APP_SECRET_KEY = 'Some Secret Unicode Key'
 
-app = Quart(__name__, host_matching=True, static_host='myloc.al')
-app.config['SERVER_NAME'] = 'myloc.al'
-app.register_blueprint(users_handler.users_api)
-
-
-@app.route('/')
-async def hello_world():
-    print(await request.get_json())
-    return 'Hello World!'
+APP_TEMP_SECRET_KEY = id_generator(32, )
 
 
-if __name__ == '__main__':
-    app.run(port=80)
+def __reset_temp_key():
+    """
+    Simple function that runs forever and cleans the temporary secret key every 4 hours
+    """
+    global APP_TEMP_SECRET_KEY
+    while True:
+        APP_TEMP_SECRET_KEY = id_generator(32, )
+        time.sleep((60*60) * 4)
+
+
+thread = Thread(target=__reset_temp_key, daemon=True)
+thread.start()

@@ -21,7 +21,7 @@
 # SUCH DAMAGES.
 #
 
-from ..models.post_models import ImagePost, TextPost, AnimationPost, AudioPost
+from ..models.post_models import ImagePost, TextPost, AnimationPost, AudioPost, LocationPost, VenuePost
 from ..models.post_models import VideoPost, VoicePost, VideoNotePost, DocumentPost, PostModel
 from ..models.post_models import Posts, Link, LinkList, GlobalPostAnalytics
 from ..models.reactions_model import Reaction
@@ -32,13 +32,14 @@ from .user_controllers import get_users
 from .channel_controllers import get_channels
 from typing import List, Union, Dict, Iterable
 from ..utils.security import id_generator, hash_generator
+from ..utils.function_handlers import to_async, async_lru
 from .reaction_controllers import create_reaction
 import datetime
 
 
-def add_post_group(posts: List[PostModel],
-                   user_model: User = None, user_id: int = None,
-                   channel_model: Channel = None, channel_id: int = None)-> Posts:
+async def add_post_group(posts: List[PostModel],
+                         user_model: User = None, user_id: int = None,
+                         channel_model: Channel = None, channel_id: int = None)-> Posts:
     """
     Adds posts to a group.
     :param posts: Posts to be grouped
@@ -57,8 +58,8 @@ def add_post_group(posts: List[PostModel],
 
         posts_hash = hash_generator(_post_hash)
 
-        creator = user_model if user_model is not None else get_users(user_id=user_id)
-        channel = channel_model if channel_model is not None else get_channels(channel_id=channel_id)
+        creator = user_model if user_model is not None else await get_users(user_id=user_id)
+        channel = channel_model if channel_model is not None else await get_channels(channel_id=channel_id)
 
         _posts = Posts(
             _id=posts_hash,
@@ -69,14 +70,12 @@ def add_post_group(posts: List[PostModel],
             posts=post_strings
         )
         if _posts.is_valid():
-            _posts.save(full_clean=True)
-            """
-            for post in posts:
-                post.group_hash = posts_hash
-                post.save()
-            """
-            posts_group = PostModel.objects.raw({'postId': {'$in': post_strings}})
-            posts_group.update({'$set': {'groupHash': posts_hash}})
+            save = to_async(_posts.save)
+            await save(full_clean=True)
+            raw = to_async(PostModel.objects.raw)
+            posts_group = await raw({'postId': {'$in': post_strings}})
+            update = to_async(posts_group.update)
+            await update({'$set': {'groupHash': posts_hash}})
         else:
             raise _posts.full_clean()
 
@@ -87,7 +86,7 @@ def add_post_group(posts: List[PostModel],
         raise
 
 
-def remove_post_group(group_model: Posts = None, group_hash: str = None)-> bool:
+async def remove_post_group(group_model: Posts = None, group_hash: str = None)-> bool:
     """
     Remove a group of posts, the posts themselves, and any reactions / comments associated with this group.
     :param group_model: The model instance of the group posts in the database
@@ -96,15 +95,20 @@ def remove_post_group(group_model: Posts = None, group_hash: str = None)-> bool:
              (less likely to happen).
     """
     try:
-        posts_group = group_model if group_model is not None else get_post_group(group_hash=group_hash)
+        posts_group = group_model if group_model is not None else await get_post_group(group_hash=group_hash)
+        posts = await get_posts(post_ids=posts_group.posts)
         posts_group.is_deleted = True
         posts_group.deleted_date = datetime.datetime.utcnow()
-        _comments = Comment.objects.raw({'postReference': {'$in': posts_group.posts}})
-        _reactions = Reaction.objects.raw({'postId': {'$in': posts_group.posts}})
+        raw_comments = to_async(Comment.objects.raw)
+        _comments = await raw_comments({'postReference': {'$in': posts_group.posts}})
         if posts_group.is_valid():
-            _comments.update({'$set': {'deletedDate': datetime.datetime.utcnow(), 'isDeleted': True}})
-            _reactions.update({'$set': {'deletedDate': datetime.datetime.utcnow(), 'isDeleted': True}})
-            posts_group.post_id.save(full_clean=True)
+            data = {'$set': {'deletedDate': datetime.datetime.utcnow(), 'isDeleted': True}}
+            update_comments = to_async(_comments.update)
+            await update_comments(data)
+            posts_update = to_async(posts.update)
+            await posts_update(data)
+            group_save = to_async(posts_group.save)
+            await group_save(full_clean=True)
             return True
         else:
             raise posts_group.full_clean()
@@ -112,30 +116,32 @@ def remove_post_group(group_model: Posts = None, group_hash: str = None)-> bool:
         return False
 
 
-def get_post_group(group_hash: str)-> Posts:
+@async_lru(max_size=1024)
+async def get_post_group(group_hash: str)-> Posts:
     """
     Gets a model instance of a Post group
     :param group_hash: The identifier of the post group
     :return: A [Posts] instance
     """
     try:
-        return Posts.objects.get({'groupHash': group_hash})
+        get = to_async(Posts.objects.get)
+        return await get({'groupHash': group_hash})
     except Posts.DoesNotExist:
         raise
 
 
-def add_text_post(user_model: User = None, user_id: int = None,
-                  channel_model: Channel = None, channel_id: int = None, *,
-                  message_id: int,
-                  text: str,
-                  tags: List[str] = None,
-                  source: Link = None,
-                  source_map: Dict[str, str] = None,
-                  links: LinkList = None,
-                  links_map: Union[Dict[str, List[Dict[str, str]]], Dict[str, int]] = None,
-                  reactions: Reaction = None,
-                  reactions_list: List[str] = None,
-                  reactions_map: List[Union[Dict[str, str], Dict[str, int]]] = None) -> TextPost:
+async def add_text_post(user_model: User = None, user_id: int = None,
+                        channel_model: Channel = None, channel_id: int = None, *,
+                        message_id: int,
+                        text: str,
+                        tags: List[str] = None,
+                        source: Link = None,
+                        source_map: Dict[str, str] = None,
+                        links: LinkList = None,
+                        links_map: Union[Dict[str, List[Dict[str, str]]], Dict[str, int]] = None,
+                        reactions: Reaction = None,
+                        reactions_list: List[str] = None,
+                        reactions_map: List[Union[Dict[str, str], Dict[str, int]]] = None) -> TextPost:
     """
     Adds a Text Post to the database.
     :param user_model: Creator of the posts. Should be either it's model, or it's ID
@@ -161,8 +167,8 @@ def add_text_post(user_model: User = None, user_id: int = None,
     """
 
     try:
-        creator = user_model if user_model is not None else get_users(user_id=user_id)
-        channel = channel_model if channel_model is not None else get_channels(channel_id=channel_id)
+        creator = user_model if user_model is not None else await get_users(user_id=user_id)
+        channel = channel_model if channel_model is not None else await get_channels(channel_id=channel_id)
 
         try:
             global_analytics = GlobalPostAnalytics.objects.get({'_id': 0})
@@ -215,7 +221,8 @@ def add_text_post(user_model: User = None, user_id: int = None,
             text_post.links = _links
 
         if text_post.is_valid():
-            text_post.save(full_clean=True)
+            save = to_async(text_post.save)
+            await save(full_clean=True)
             global_analytics.added_posts += 1
             global_analytics.save()
 
@@ -230,23 +237,23 @@ def add_text_post(user_model: User = None, user_id: int = None,
         raise
 
 
-def add_image_post(user_model: User = None, user_id: int = None,
-                   channel_model: Channel = None, channel_id: int = None, *,
-                   message_id: int,
-                   file_id: str,
-                   file_size: int,
-                   width: int,
-                   height: int,
-                   thumbnail_file_id: str = None,
-                   thumbnail_size: int = None,
-                   caption: str = None, tags: List[str] = None,
-                   source: Link = None,
-                   source_map: Dict[str, str] = None,
-                   links: LinkList = None,
-                   links_map: Union[Dict[str, List[Dict[str, str]]], Dict[str, int]] = None,
-                   reactions: Reaction = None,
-                   reactions_list: List[str] = None,
-                   reactions_map: List[Union[Dict[str, str], Dict[str, int]]] = None) -> ImagePost:
+async def add_image_post(user_model: User = None, user_id: int = None,
+                         channel_model: Channel = None, channel_id: int = None, *,
+                         message_id: int,
+                         file_id: str,
+                         file_size: int,
+                         width: int,
+                         height: int,
+                         thumbnail_file_id: str = None,
+                         thumbnail_size: int = None,
+                         caption: str = None, tags: List[str] = None,
+                         source: Link = None,
+                         source_map: Dict[str, str] = None,
+                         links: LinkList = None,
+                         links_map: Union[Dict[str, List[Dict[str, str]]], Dict[str, int]] = None,
+                         reactions: Reaction = None,
+                         reactions_list: List[str] = None,
+                         reactions_map: List[Union[Dict[str, str], Dict[str, int]]] = None) -> ImagePost:
     """
     Adds an Image Post to the database.
     :param user_model: Creator of the posts. Should be either it's model, or it's ID
@@ -278,8 +285,8 @@ def add_image_post(user_model: User = None, user_id: int = None,
     """
 
     try:
-        creator = user_model if user_model is not None else get_users(user_id=user_id)
-        channel = channel_model if channel_model is not None else get_channels(channel_id=channel_id)
+        creator = user_model if user_model is not None else await get_users(user_id=user_id)
+        channel = channel_model if channel_model is not None else await get_channels(channel_id=channel_id)
 
         try:
             global_analytics = GlobalPostAnalytics.objects.get({'_id': 0})
@@ -341,7 +348,8 @@ def add_image_post(user_model: User = None, user_id: int = None,
             image_post.thumbnail_size = thumbnail_size
 
         if image_post.is_valid():
-            image_post.save(full_clean=True)
+            save = to_async(image_post.save)
+            await save(full_clean=True)
 
             global_analytics.added_posts += 1
             global_analytics.save()
@@ -357,25 +365,25 @@ def add_image_post(user_model: User = None, user_id: int = None,
         raise
 
 
-def add_video_post(user_model: User = None, user_id: int = None,
-                   channel_model: Channel = None, channel_id: int = None, *,
-                   message_id: int,
-                   file_id: str,
-                   file_size: int,
-                   width: int,
-                   height: int,
-                   duration: int,
-                   mime_type: str = None,
-                   thumbnail_file_id: str = None,
-                   thumbnail_size: int = None,
-                   caption: str = None, tags: List[str] = None,
-                   source: Link = None,
-                   source_map: Dict[str, str] = None,
-                   links: LinkList = None,
-                   links_map: Union[Dict[str, List[Dict[str, str]]], Dict[str, int]] = None,
-                   reactions: Reaction = None,
-                   reactions_list: List[str] = None,
-                   reactions_map: List[Union[Dict[str, str], Dict[str, int]]] = None) -> VideoPost:
+async def add_video_post(user_model: User = None, user_id: int = None,
+                         channel_model: Channel = None, channel_id: int = None, *,
+                         message_id: int,
+                         file_id: str,
+                         file_size: int,
+                         width: int,
+                         height: int,
+                         duration: int,
+                         mime_type: str = None,
+                         thumbnail_file_id: str = None,
+                         thumbnail_size: int = None,
+                         caption: str = None, tags: List[str] = None,
+                         source: Link = None,
+                         source_map: Dict[str, str] = None,
+                         links: LinkList = None,
+                         links_map: Union[Dict[str, List[Dict[str, str]]], Dict[str, int]] = None,
+                         reactions: Reaction = None,
+                         reactions_list: List[str] = None,
+                         reactions_map: List[Union[Dict[str, str], Dict[str, int]]] = None) -> VideoPost:
     """
     Adds a Video Post to the database.
     :param user_model: Creator of the posts. Should be either it's model, or it's ID
@@ -409,8 +417,8 @@ def add_video_post(user_model: User = None, user_id: int = None,
     """
 
     try:
-        creator = user_model if user_model is not None else get_users(user_id=user_id)
-        channel = channel_model if channel_model is not None else get_channels(channel_id=channel_id)
+        creator = user_model if user_model is not None else await get_users(user_id=user_id)
+        channel = channel_model if channel_model is not None else await get_channels(channel_id=channel_id)
 
         try:
             global_analytics = GlobalPostAnalytics.objects.get({'_id': 0})
@@ -473,7 +481,8 @@ def add_video_post(user_model: User = None, user_id: int = None,
             video_post.thumbnail_size = thumbnail_size
 
         if video_post.is_valid():
-            video_post.save(full_clean=True)
+            save = to_async(video_post.save)
+            await save(full_clean=True)
 
             global_analytics.added_posts += 1
             global_analytics.save()
@@ -489,24 +498,24 @@ def add_video_post(user_model: User = None, user_id: int = None,
         raise
 
 
-def add_video_note_post(user_model: User = None, user_id: int = None,
-                        channel_model: Channel = None, channel_id: int = None, *,
-                        message_id: int,
-                        file_id: str,
-                        file_size: int,
-                        length: int,
-                        duration: int,
-                        mime_type: str = None,
-                        thumbnail_file_id: str = None,
-                        thumbnail_size: int = None,
-                        caption: str = None, tags: List[str] = None,
-                        source: Link = None,
-                        source_map: Dict[str, str] = None,
-                        links: LinkList = None,
-                        links_map: Union[Dict[str, List[Dict[str, str]]], Dict[str, int]] = None,
-                        reactions: Reaction = None,
-                        reactions_list: List[str] = None,
-                        reactions_map: List[Union[Dict[str, str], Dict[str, int]]] = None) -> VideoNotePost:
+async def add_video_note_post(user_model: User = None, user_id: int = None,
+                              channel_model: Channel = None, channel_id: int = None, *,
+                              message_id: int,
+                              file_id: str,
+                              file_size: int,
+                              length: int,
+                              duration: int,
+                              mime_type: str = None,
+                              thumbnail_file_id: str = None,
+                              thumbnail_size: int = None,
+                              caption: str = None, tags: List[str] = None,
+                              source: Link = None,
+                              source_map: Dict[str, str] = None,
+                              links: LinkList = None,
+                              links_map: Union[Dict[str, List[Dict[str, str]]], Dict[str, int]] = None,
+                              reactions: Reaction = None,
+                              reactions_list: List[str] = None,
+                              reactions_map: List[Union[Dict[str, str], Dict[str, int]]] = None) -> VideoNotePost:
     """
     Adds a VideoNote Post to the database.
     :param user_model: Creator of the posts. Should be either it's model, or it's ID
@@ -539,8 +548,8 @@ def add_video_note_post(user_model: User = None, user_id: int = None,
     """
 
     try:
-        creator = user_model if user_model is not None else get_users(user_id=user_id)
-        channel = channel_model if channel_model is not None else get_channels(channel_id=channel_id)
+        creator = user_model if user_model is not None else await get_users(user_id=user_id)
+        channel = channel_model if channel_model is not None else await get_channels(channel_id=channel_id)
 
         try:
             global_analytics = GlobalPostAnalytics.objects.get({'_id': 0})
@@ -602,7 +611,8 @@ def add_video_note_post(user_model: User = None, user_id: int = None,
             video_note_post.thumbnail_size = thumbnail_size
 
         if video_note_post.is_valid():
-            video_note_post.save(full_clean=True)
+            save = to_async(video_note_post.save)
+            await save(full_clean=True)
 
             global_analytics.added_posts += 1
             global_analytics.save()
@@ -618,26 +628,26 @@ def add_video_note_post(user_model: User = None, user_id: int = None,
         raise
 
 
-def add_animation_post(user_model: User = None, user_id: int = None,
-                       channel_model: Channel = None, channel_id: int = None, *,
-                       message_id: int,
-                       file_id: str,
-                       file_size: int,
-                       width: int,
-                       height: int,
-                       duration: int,
-                       file_name: str = None,
-                       mime_type: str = None,
-                       thumbnail_file_id: str = None,
-                       thumbnail_size: int = None,
-                       caption: str = None, tags: List[str] = None,
-                       source: Link = None,
-                       source_map: Dict[str, str] = None,
-                       links: LinkList = None,
-                       links_map: Union[Dict[str, List[Dict[str, str]]], Dict[str, int]] = None,
-                       reactions: Reaction = None,
-                       reactions_list: List[str] = None,
-                       reactions_map: List[Union[Dict[str, str], Dict[str, int]]] = None) -> AnimationPost:
+async def add_animation_post(user_model: User = None, user_id: int = None,
+                             channel_model: Channel = None, channel_id: int = None, *,
+                             message_id: int,
+                             file_id: str,
+                             file_size: int,
+                             width: int,
+                             height: int,
+                             duration: int,
+                             file_name: str = None,
+                             mime_type: str = None,
+                             thumbnail_file_id: str = None,
+                             thumbnail_size: int = None,
+                             caption: str = None, tags: List[str] = None,
+                             source: Link = None,
+                             source_map: Dict[str, str] = None,
+                             links: LinkList = None,
+                             links_map: Union[Dict[str, List[Dict[str, str]]], Dict[str, int]] = None,
+                             reactions: Reaction = None,
+                             reactions_list: List[str] = None,
+                             reactions_map: List[Union[Dict[str, str], Dict[str, int]]] = None) -> AnimationPost:
     """
     Adds an Animation Post to the database.
     :param user_model: Creator of the posts. Should be either it's model, or it's ID
@@ -672,8 +682,8 @@ def add_animation_post(user_model: User = None, user_id: int = None,
     """
 
     try:
-        creator = user_model if user_model is not None else get_users(user_id=user_id)
-        channel = channel_model if channel_model is not None else get_channels(channel_id=channel_id)
+        creator = user_model if user_model is not None else await get_users(user_id=user_id)
+        channel = channel_model if channel_model is not None else await get_channels(channel_id=channel_id)
 
         try:
             global_analytics = GlobalPostAnalytics.objects.get({'_id': 0})
@@ -737,7 +747,8 @@ def add_animation_post(user_model: User = None, user_id: int = None,
             animation_post.thumbnail_size = thumbnail_size
 
         if animation_post.is_valid():
-            animation_post.save(full_clean=True)
+            save = to_async(animation_post.save)
+            await save(full_clean=True)
 
             global_analytics.added_posts += 1
             global_analytics.save()
@@ -753,21 +764,21 @@ def add_animation_post(user_model: User = None, user_id: int = None,
         raise
 
 
-def add_voice_post(user_model: User = None, user_id: int = None,
-                   channel_model: Channel = None, channel_id: int = None, *,
-                   message_id: int,
-                   file_id: str,
-                   file_size: int,
-                   duration: int,
-                   mime_type: str = None,
-                   caption: str = None, tags: List[str] = None,
-                   source: Link = None,
-                   source_map: Dict[str, str] = None,
-                   links: LinkList = None,
-                   links_map: Union[Dict[str, List[Dict[str, str]]], Dict[str, int]] = None,
-                   reactions: Reaction = None,
-                   reactions_list: List[str] = None,
-                   reactions_map: List[Union[Dict[str, str], Dict[str, int]]] = None) -> VoicePost:
+async def add_voice_post(user_model: User = None, user_id: int = None,
+                         channel_model: Channel = None, channel_id: int = None, *,
+                         message_id: int,
+                         file_id: str,
+                         file_size: int,
+                         duration: int,
+                         mime_type: str = None,
+                         caption: str = None, tags: List[str] = None,
+                         source: Link = None,
+                         source_map: Dict[str, str] = None,
+                         links: LinkList = None,
+                         links_map: Union[Dict[str, List[Dict[str, str]]], Dict[str, int]] = None,
+                         reactions: Reaction = None,
+                         reactions_list: List[str] = None,
+                         reactions_map: List[Union[Dict[str, str], Dict[str, int]]] = None) -> VoicePost:
     """
     Adds a Voice Post to the database.
     :param user_model: Creator of the posts. Should be either it's model, or it's ID
@@ -797,8 +808,8 @@ def add_voice_post(user_model: User = None, user_id: int = None,
     """
 
     try:
-        creator = user_model if user_model is not None else get_users(user_id=user_id)
-        channel = channel_model if channel_model is not None else get_channels(channel_id=channel_id)
+        creator = user_model if user_model is not None else await get_users(user_id=user_id)
+        channel = channel_model if channel_model is not None else await get_channels(channel_id=channel_id)
 
         try:
             global_analytics = GlobalPostAnalytics.objects.get({'_id': 0})
@@ -855,7 +866,8 @@ def add_voice_post(user_model: User = None, user_id: int = None,
             voice_post.caption = caption
 
         if voice_post.is_valid():
-            voice_post.save(full_clean=True)
+            save = to_async(voice_post.save)
+            await save(full_clean=True)
 
             global_analytics.added_posts += 1
             global_analytics.save()
@@ -871,25 +883,25 @@ def add_voice_post(user_model: User = None, user_id: int = None,
         raise
 
 
-def add_audio_post(user_model: User = None, user_id: int = None,
-                   channel_model: Channel = None, channel_id: int = None, *,
-                   message_id: int,
-                   file_id: str,
-                   file_size: int,
-                   duration: int,
-                   performer: str = None,
-                   title: str = None,
-                   thumbnail_file_id: str = None,
-                   thumbnail_size: str = None,
-                   mime_type: str = None,
-                   caption: str = None, tags: List[str] = None,
-                   source: Link = None,
-                   source_map: Dict[str, str] = None,
-                   links: LinkList = None,
-                   links_map: Union[Dict[str, List[Dict[str, str]]], Dict[str, int]] = None,
-                   reactions: Reaction = None,
-                   reactions_list: List[str] = None,
-                   reactions_map: List[Union[Dict[str, str], Dict[str, int]]] = None) -> AudioPost:
+async def add_audio_post(user_model: User = None, user_id: int = None,
+                         channel_model: Channel = None, channel_id: int = None, *,
+                         message_id: int,
+                         file_id: str,
+                         file_size: int,
+                         duration: int,
+                         performer: str = None,
+                         title: str = None,
+                         thumbnail_file_id: str = None,
+                         thumbnail_size: str = None,
+                         mime_type: str = None,
+                         caption: str = None, tags: List[str] = None,
+                         source: Link = None,
+                         source_map: Dict[str, str] = None,
+                         links: LinkList = None,
+                         links_map: Union[Dict[str, List[Dict[str, str]]], Dict[str, int]] = None,
+                         reactions: Reaction = None,
+                         reactions_list: List[str] = None,
+                         reactions_map: List[Union[Dict[str, str], Dict[str, int]]] = None) -> AudioPost:
     """
     Adds an Audio Post to the database.
     :param user_model: Creator of the posts. Should be either it's model, or it's ID
@@ -923,8 +935,8 @@ def add_audio_post(user_model: User = None, user_id: int = None,
     """
 
     try:
-        creator = user_model if user_model is not None else get_users(user_id=user_id)
-        channel = channel_model if channel_model is not None else get_channels(channel_id=channel_id)
+        creator = user_model if user_model is not None else await get_users(user_id=user_id)
+        channel = channel_model if channel_model is not None else await get_channels(channel_id=channel_id)
 
         try:
             global_analytics = GlobalPostAnalytics.objects.get({'_id': 0})
@@ -989,7 +1001,8 @@ def add_audio_post(user_model: User = None, user_id: int = None,
             audio_post.thumbnail_size = thumbnail_size
 
         if audio_post.is_valid():
-            audio_post.save(full_clean=True)
+            save = to_async(audio_post.save)
+            await save(full_clean=True)
 
             global_analytics.added_posts += 1
             global_analytics.save()
@@ -1005,23 +1018,23 @@ def add_audio_post(user_model: User = None, user_id: int = None,
         raise
 
 
-def add_file_post(user_model: User = None, user_id: int = None,
-                  channel_model: Channel = None, channel_id: int = None, *,
-                  message_id: int,
-                  file_id: str,
-                  file_size: int,
-                  file_name: str = None,
-                  mime_type: str = None,
-                  thumbnail_file_id: str = None,
-                  thumbnail_size: int = None,
-                  caption: str = None, tags: List[str] = None,
-                  source: Link = None,
-                  source_map: Dict[str, str] = None,
-                  links: LinkList = None,
-                  links_map: Union[Dict[str, List[Dict[str, str]]], Dict[str, int]] = None,
-                  reactions: Reaction = None,
-                  reactions_list: List[str] = None,
-                  reactions_map: List[Union[Dict[str, str], Dict[str, int]]] = None) -> DocumentPost:
+async def add_file_post(user_model: User = None, user_id: int = None,
+                        channel_model: Channel = None, channel_id: int = None, *,
+                        message_id: int,
+                        file_id: str,
+                        file_size: int,
+                        file_name: str = None,
+                        mime_type: str = None,
+                        thumbnail_file_id: str = None,
+                        thumbnail_size: int = None,
+                        caption: str = None, tags: List[str] = None,
+                        source: Link = None,
+                        source_map: Dict[str, str] = None,
+                        links: LinkList = None,
+                        links_map: Union[Dict[str, List[Dict[str, str]]], Dict[str, int]] = None,
+                        reactions: Reaction = None,
+                        reactions_list: List[str] = None,
+                        reactions_map: List[Union[Dict[str, str], Dict[str, int]]] = None) -> DocumentPost:
     """
     Adds a Document Post to the database.
     :param user_model: Creator of the posts. Should be either it's model, or it's ID
@@ -1053,8 +1066,8 @@ def add_file_post(user_model: User = None, user_id: int = None,
     """
 
     try:
-        creator = user_model if user_model is not None else get_users(user_id=user_id)
-        channel = channel_model if channel_model is not None else get_channels(channel_id=channel_id)
+        creator = user_model if user_model is not None else await get_users(user_id=user_id)
+        channel = channel_model if channel_model is not None else await get_channels(channel_id=channel_id)
 
         try:
             global_analytics = GlobalPostAnalytics.objects.get({'_id': 0})
@@ -1117,7 +1130,8 @@ def add_file_post(user_model: User = None, user_id: int = None,
             document_post.thumbnail_size = thumbnail_size
 
         if document_post.is_valid():
-            document_post.save(full_clean=True)
+            save = to_async(document_post.save)
+            await save(full_clean=True)
 
             global_analytics.added_posts += 1
             global_analytics.save()
@@ -1133,7 +1147,247 @@ def add_file_post(user_model: User = None, user_id: int = None,
         raise
 
 
-def remove_post(post_model: PostModel = None, post_id: str = None)-> bool:
+async def add_location(user_model: User = None, user_id: int = None,
+                       channel_model: Channel = None, channel_id: int = None, *,
+                       message_id: int,
+                       latitude: str,
+                       longitude: int,
+                       caption: str = None, tags: List[str] = None,
+                       source: Link = None,
+                       source_map: Dict[str, str] = None,
+                       links: LinkList = None,
+                       links_map: Union[Dict[str, List[Dict[str, str]]], Dict[str, int]] = None,
+                       reactions: Reaction = None,
+                       reactions_list: List[str] = None,
+                       reactions_map: List[Union[Dict[str, str], Dict[str, int]]] = None) -> DocumentPost:
+    """
+    Adds a Location Post to the database.
+    :param user_model: Creator of the posts. Should be either it's model, or it's ID
+    :param user_id: Creator of the posts. Should be either it's model, or it's ID
+    :param channel_model: Channel to where the posts belongs. Should be either it's model, or it's ID
+    :param channel_id: Channel to where the posts belongs. Should be either it's model, or it's ID
+    :param message_id: The Telegram's message ID to identify a message in a channel
+    :param latitude: The latitude of the location
+    :param longitude: The longitude of the location
+    :param caption: A caption is a small text, up to 1024 characters, that can be presented with the file
+    :param tags: The tags detected within the Post
+    :param source: The source of the Post. This is either a [Link] object, or a dict that maps the data for a [Link]
+    :param source_map: The source of the Post. This is either a [Link] object, or a dict that maps the data for a [Link]
+    :param links: The links of the post. This is either a [LinkList] object, or a dict that maps the data for a
+                  [LinkList]
+    :param links_map: The links of the post. This is either a [LinkList] object, or a dict that maps the data for a
+                  [LinkList]
+    :param reactions: The reactions of the post. This is either a [Reaction] object, a list of unicode emojis, or a dict
+                      mapping the emojis and an initial count
+    :param reactions_list: The reactions of the post. This is either a [Reaction] object, a list of unicode emojis,
+                           or a dict mapping the emojis and an initial count
+    :param reactions_map: The reactions of the post. This is either a [Reaction] object, a list of unicode emojis, or a
+                          dict mapping the emojis and an initial count
+    :return: [LocationPost] object referencing the post saved on the database.
+    """
+
+    try:
+        creator = user_model if user_model is not None else await get_users(user_id=user_id)
+        channel = channel_model if channel_model is not None else await get_channels(channel_id=channel_id)
+
+        try:
+            global_analytics = GlobalPostAnalytics.objects.get({'_id': 0})
+        except GlobalPostAnalytics.DoesNotExist:
+            global_analytics = GlobalPostAnalytics(_id=0, created_posts=0)
+
+        global_analytics.created_posts += 1
+        global_analytics.save()
+
+        _id = id_generator(16, global_analytics.created_posts)
+
+        _source = None
+        if source is not None:
+            _source = source
+        elif source_map is not None:
+            _source = _create_link(source_map)
+
+        _links = None
+        if links is not None:
+            _links = links
+        elif links_map is not None:
+            _links = _create_link_list(links_map)
+
+        location_post = LocationPost(
+            _id=_id,
+            post_id=_id,
+            creator=creator,
+            channel=channel,
+            message_id=message_id,
+            type='location',
+            created_date=datetime.datetime.utcnow(),
+            latitude=latitude,
+            longitude=longitude,
+        )
+
+        _reactions = None
+        if reactions is not None:
+            _reactions = reactions
+        elif reactions_list is not None or reactions_map is not None:
+            _reactions = create_reaction(  # document_post,
+                                         reactions_list=reactions_list, reactions_map=reactions_map)
+
+        if _reactions is not None:
+            location_post.reactions = _reactions
+        if tags is not None:
+            location_post.tags = tags
+        if _source is not None:
+            location_post.source = _source
+        if _links is not None:
+            location_post.links = _links
+        if caption is not None:
+            location_post.caption = caption
+
+        if location_post.is_valid():
+            save = to_async(location_post.save)
+            await save(full_clean=True)
+
+            global_analytics.added_posts += 1
+            global_analytics.save()
+
+        else:
+            raise location_post.full_clean()
+
+        return location_post
+
+    except User.DoesNotExist:
+        raise
+    except Channel.DoesNotExist:
+        raise
+
+
+async def add_venue(user_model: User = None, user_id: int = None,
+                    channel_model: Channel = None, channel_id: int = None, *,
+                    message_id: int,
+                    latitude: str,
+                    longitude: int,
+                    title: str,
+                    address: str,
+                    foursquare_id: str = None,
+                    foursquare_type: str = None,
+                    caption: str = None, tags: List[str] = None,
+                    source: Link = None,
+                    source_map: Dict[str, str] = None,
+                    links: LinkList = None,
+                    links_map: Union[Dict[str, List[Dict[str, str]]], Dict[str, int]] = None,
+                    reactions: Reaction = None,
+                    reactions_list: List[str] = None,
+                    reactions_map: List[Union[Dict[str, str], Dict[str, int]]] = None) -> DocumentPost:
+    """
+    Adds a Location Post to the database.
+    :param user_model: Creator of the posts. Should be either it's model, or it's ID
+    :param user_id: Creator of the posts. Should be either it's model, or it's ID
+    :param channel_model: Channel to where the posts belongs. Should be either it's model, or it's ID
+    :param channel_id: Channel to where the posts belongs. Should be either it's model, or it's ID
+    :param message_id: The Telegram's message ID to identify a message in a channel
+    :param latitude: The latitude of the location
+    :param longitude: The longitude of the location
+    :param title: Title of the Venue
+    :param address: Address of the Venue
+    :param foursquare_id: FourSquare Unique identifier of the Venue
+    :param foursquare_type: FourSquare type of Venue (For example, “arts_entertainment/aquarium” or “food/icecream”)
+    :param caption: A caption is a small text, up to 1024 characters, that can be presented with the file
+    :param tags: The tags detected within the Post
+    :param source: The source of the Post. This is either a [Link] object, or a dict that maps the data for a [Link]
+    :param source_map: The source of the Post. This is either a [Link] object, or a dict that maps the data for a [Link]
+    :param links: The links of the post. This is either a [LinkList] object, or a dict that maps the data for a
+                  [LinkList]
+    :param links_map: The links of the post. This is either a [LinkList] object, or a dict that maps the data for a
+                  [LinkList]
+    :param reactions: The reactions of the post. This is either a [Reaction] object, a list of unicode emojis, or a dict
+                      mapping the emojis and an initial count
+    :param reactions_list: The reactions of the post. This is either a [Reaction] object, a list of unicode emojis,
+                           or a dict mapping the emojis and an initial count
+    :param reactions_map: The reactions of the post. This is either a [Reaction] object, a list of unicode emojis, or a
+                          dict mapping the emojis and an initial count
+    :return: [LocationPost] object referencing the post saved on the database.
+    """
+
+    try:
+        creator = user_model if user_model is not None else await get_users(user_id=user_id)
+        channel = channel_model if channel_model is not None else await get_channels(channel_id=channel_id)
+
+        try:
+            global_analytics = GlobalPostAnalytics.objects.get({'_id': 0})
+        except GlobalPostAnalytics.DoesNotExist:
+            global_analytics = GlobalPostAnalytics(_id=0, created_posts=0)
+
+        global_analytics.created_posts += 1
+        global_analytics.save()
+
+        _id = id_generator(16, global_analytics.created_posts)
+
+        _source = None
+        if source is not None:
+            _source = source
+        elif source_map is not None:
+            _source = _create_link(source_map)
+
+        _links = None
+        if links is not None:
+            _links = links
+        elif links_map is not None:
+            _links = _create_link_list(links_map)
+
+        venue_post = VenuePost(
+            _id=_id,
+            post_id=_id,
+            creator=creator,
+            channel=channel,
+            message_id=message_id,
+            type='location',
+            created_date=datetime.datetime.utcnow(),
+            latitude=latitude,
+            longitude=longitude,
+            title=title,
+            address=address
+        )
+
+        _reactions = None
+        if reactions is not None:
+            _reactions = reactions
+        elif reactions_list is not None or reactions_map is not None:
+            _reactions = create_reaction(  # document_post,
+                                         reactions_list=reactions_list, reactions_map=reactions_map)
+
+        if _reactions is not None:
+            venue_post.reactions = _reactions
+        if tags is not None:
+            venue_post.tags = tags
+        if _source is not None:
+            venue_post.source = _source
+        if _links is not None:
+            venue_post.links = _links
+        if caption is not None:
+            venue_post.caption = caption
+        if foursquare_id is not None:
+            venue_post.foursquare_id = foursquare_id
+        if foursquare_type is not None:
+            venue_post.foursquare_type = foursquare_type
+
+        if venue_post.is_valid():
+            save = to_async(venue_post.save)
+            await save(full_clean=True)
+
+            global_analytics.added_posts += 1
+            global_analytics.save()
+
+        else:
+            raise venue_post.full_clean()
+
+        return venue_post
+
+    except User.DoesNotExist:
+        raise
+    except Channel.DoesNotExist:
+        raise
+
+
+async def remove_post(post_model: PostModel = None, post_id: str = None)-> bool:
     """
     Remove a post, and all it's associated comments from the database, by setting the deleted flag.
     :param post_model: The model instance of a post on the database
@@ -1142,13 +1396,16 @@ def remove_post(post_model: PostModel = None, post_id: str = None)-> bool:
              (less likely to happen).
     """
     try:
-        post = post_model if post_model is not None else get_posts(post_id=post_id)
+        post = post_model if post_model is not None else await get_posts(post_id=post_id)
         post.is_deleted = True
         post.deleted_date = datetime.datetime.utcnow()
-        _comments = Comment.objects.raw({'postReference': post.post_id})
+        raw = to_async(Comment.objects.raw)
+        _comments = await raw({'postReference': post.post_id})
         if post.is_valid():
-            _comments.update({'$set': {'deletedDate': datetime.datetime.utcnow(), 'isDeleted': True}})
-            post.save(full_clean=True)
+            update = to_async(_comments.update)
+            await update({'$set': {'deletedDate': datetime.datetime.utcnow(), 'isDeleted': True}})
+            save = to_async(post.save)
+            await save(full_clean=True)
             return True
         else:
             raise post.full_clean()
@@ -1156,7 +1413,7 @@ def remove_post(post_model: PostModel = None, post_id: str = None)-> bool:
         return False
 
 
-def get_posts(post_id: str = None, post_ids: List[str] = None)-> Union[PostModel, Iterable[PostModel], None]:
+async def get_posts(post_id: str = None, post_ids: List[str] = None)-> Union[PostModel, Iterable[PostModel], None]:
     """
     Gets a single post, or an iterable array of posts from the database. Required either `post_id` or `post_ids`
     :param post_id: (Optional) The identifier of a post on the database
@@ -1165,10 +1422,12 @@ def get_posts(post_id: str = None, post_ids: List[str] = None)-> Union[PostModel
              None, or there are no database matches.
     """
     try:
+        get = to_async(PostModel.objects.get)
+        raw = to_async(PostModel.objects.raw)
         if post_id is not None:
-            posts = PostModel.objects.get({'postId': post_id, 'isDeleted': False})
+            posts = await get({'postId': post_id, 'isDeleted': False})
         elif post_ids is not None:
-            posts = PostModel.objects.raw({'postId': {'$in': post_ids}, 'isDeleted': False})
+            posts = await raw({'postId': {'$in': post_ids}, 'isDeleted': False})
         else:
             raise PostModel.DoesNotExist
         return posts

@@ -83,8 +83,8 @@ class PostModel(BasePostModel):
     message_id = fields.BigIntegerField(required=True, verbose_name='post_message_id', mongo_name='messageId')
     mime_type = fields.CharField(verbose_name='post_mime_type', mongo_name='mimeType', default=None)
     type = fields.CharField(verbose_name='post_type', mongo_name='type', required=True,
-                            choices=('image', 'text', 'video', 'animation',
-                                     'document', 'video_note', 'voice', 'audio')
+                            choices=('image', 'text', 'video', 'animation', 'document',
+                                     'video_note', 'voice', 'audio', 'location', 'venue')
                             )
     group_hash = fields.CharField(verbose_name='group_hash', mongo_name='groupHash', default=None)
     created_date = fields.DateTimeField(required=True, verbose_name='post_created_date', mongo_name='createdDate')
@@ -113,6 +113,32 @@ class PostModel(BasePostModel):
         ]
         ignore_unknown_fields = True
 
+    @property
+    def dict(self):
+        return dict(
+            post_id=self.post_id,
+            message_id=self.message_id,
+            creator=self.creator,
+            channel=self.channel,
+            type=self.type,
+            mime_type=self.mime_type,
+            group=self.group_hash,
+            created_date=self.created_date,
+            tags=self.tags,
+            links=dict(
+                links_per_row=self.links.links_per_row,
+                links=[
+                    {'label': i.label, 'url': i.url} for i in self.links.links
+                ]
+            ),
+            source=dict(
+                label=self.source.label,
+                url=self.source.url
+            ),
+            reactions=[
+                dict(emoji=i.emoji, count=i.count) for i in self.reactions.reactions
+            ])
+
 
 class ImagePost(PostModel):
     file_id = fields.CharField(required=True, verbose_name='file_id', mongo_name='fileId')
@@ -122,6 +148,44 @@ class ImagePost(PostModel):
     caption = fields.CharField(verbose_name='caption', mongo_name='caption', default=None)
     width = fields.IntegerField(verbose_name='width', mongo_name='width', required=True)
     height = fields.IntegerField(verbose_name='height', mongo_name='height', required=True)
+
+    @property
+    def dict(self):
+        return dict(
+            post_id=self.post_id,
+            message_id=self.message_id,
+            creator=self.creator,
+            channel=self.channel,
+            type=self.type,
+            mime_type=self.mime_type,
+            group=self.group_hash,
+            created_date=self.created_date,
+            tags=self.tags,
+            links=dict(
+                links_per_row=self.links.links_per_row,
+                links=[
+                    {'label': i.label, 'url': i.url} for i in self.links.links
+                ]
+            ),
+            source=dict(
+                label=self.source.label,
+                url=self.source.url
+            ),
+            reactions=[
+                dict(emoji=i.emoji, count=i.count) for i in self.reactions.reactions
+            ],
+            image=dict(
+                file_id=self.file_id,
+                file_size=self.file_size,
+                width=self.width,
+                height=self.height
+            ),
+            thumbnail=dict(
+                file_id=self.thumbnail_file_id,
+                file_size=self.thumbnail_size
+            ),
+            caption=self.caption
+        )
 
 
 class VideoNotePost(PostModel):
@@ -133,13 +197,130 @@ class VideoNotePost(PostModel):
     duration = fields.IntegerField(verbose_name='duration', mongo_name='duration', required=True)
     length = fields.IntegerField(verbose_name='length', mongo_name='length', required=True)
 
+    @property
+    def dict(self):
+        return dict(
+            post_id=self.post_id,
+            message_id=self.message_id,
+            creator=self.creator,
+            channel=self.channel,
+            type=self.type,
+            mime_type=self.mime_type,
+            group=self.group_hash,
+            created_date=self.created_date,
+            tags=self.tags,
+            links=dict(
+                links_per_row=self.links.links_per_row,
+                links=[
+                    {'label': i.label, 'url': i.url} for i in self.links.links
+                ]
+            ),
+            source=dict(
+                label=self.source.label,
+                url=self.source.url
+            ),
+            reactions=[
+                dict(emoji=i.emoji, count=i.count) for i in self.reactions.reactions
+            ],
+            video_note=dict(
+                file_id=self.file_id,
+                file_size=self.file_size,
+                length=self.length,
+                duration=self.duration
+            ),
+            thumbnail=dict(
+                file_id=self.thumbnail_file_id,
+                file_size=self.thumbnail_size
+            ),
+            caption=self.caption
+        )
+
 
 class VideoPost(ImagePost):
     duration = fields.IntegerField(verbose_name='duration', mongo_name='duration', required=True)
 
+    @property
+    def dict(self):
+        return dict(
+            post_id=self.post_id,
+            message_id=self.message_id,
+            creator=self.creator,
+            channel=self.channel,
+            type=self.type,
+            mime_type=self.mime_type,
+            group=self.group_hash,
+            created_date=self.created_date,
+            tags=self.tags,
+            links=dict(
+                links_per_row=self.links.links_per_row,
+                links=[
+                    {'label': i.label, 'url': i.url} for i in self.links.links
+                ]
+            ),
+            source=dict(
+                label=self.source.label,
+                url=self.source.url
+            ),
+            reactions=[
+                dict(emoji=i.emoji, count=i.count) for i in self.reactions.reactions
+            ],
+            video=dict(
+                file_id=self.file_id,
+                file_size=self.file_size,
+                width=self.width,
+                height=self.height,
+                duration=self.duration
+            ),
+            thumbnail=dict(
+                file_id=self.thumbnail_file_id,
+                file_size=self.thumbnail_size
+            ),
+            caption=self.caption
+        )
+
 
 class AnimationPost(VideoPost):
     file_name = fields.CharField(verbose_name='file_name', mongo_name='fileName', default=None)
+
+    @property
+    def dict(self):
+        return dict(
+            post_id=self.post_id,
+            message_id=self.message_id,
+            creator=self.creator,
+            channel=self.channel,
+            type=self.type,
+            mime_type=self.mime_type,
+            group=self.group_hash,
+            created_date=self.created_date,
+            tags=self.tags,
+            links=dict(
+                links_per_row=self.links.links_per_row,
+                links=[
+                    {'label': i.label, 'url': i.url} for i in self.links.links
+                ]
+            ),
+            source=dict(
+                label=self.source.label,
+                url=self.source.url
+            ),
+            reactions=[
+                dict(emoji=i.emoji, count=i.count) for i in self.reactions.reactions
+            ],
+            animation=dict(
+                file_id=self.file_id,
+                file_size=self.file_size,
+                width=self.width,
+                height=self.height,
+                duration=self.duration,
+                file_name=self.file_name
+            ),
+            thumbnail=dict(
+                file_id=self.thumbnail_file_id,
+                file_size=self.thumbnail_size
+            ),
+            caption=self.caption
+        )
 
 
 class VoicePost(PostModel):
@@ -148,12 +329,83 @@ class VoicePost(PostModel):
     file_size = fields.IntegerField(verbose_name='file_size', mongo_name='fileSize', default=None)
     caption = fields.CharField(verbose_name='caption', mongo_name='caption', default=None)
 
+    @property
+    def dict(self):
+        return dict(
+            post_id=self.post_id,
+            message_id=self.message_id,
+            creator=self.creator,
+            channel=self.channel,
+            type=self.type,
+            mime_type=self.mime_type,
+            group=self.group_hash,
+            created_date=self.created_date,
+            tags=self.tags,
+            links=dict(
+                links_per_row=self.links.links_per_row,
+                links=[
+                    {'label': i.label, 'url': i.url} for i in self.links.links
+                ]
+            ),
+            source=dict(
+                label=self.source.label,
+                url=self.source.url
+            ),
+            reactions=[
+                dict(emoji=i.emoji, count=i.count) for i in self.reactions.reactions
+            ],
+            voice=dict(
+                file_id=self.file_id,
+                file_size=self.file_size,
+                duration=self.duration
+            ),
+            caption=self.caption
+        )
+
 
 class AudioPost(VoicePost):
     performer = fields.CharField(verbose_name='performer', mongo_name='performer', default=None)
     title = fields.CharField(verbose_name='title', mongo_name='title', default=None)
     thumbnail_file_id = fields.CharField(verbose_name='thumbnail_file_id', mongo_name='thumbFileId', default=None)
     thumbnail_size = fields.IntegerField(verbose_name='thumbnail_size', mongo_name='thumbSize', default=None)
+
+    @property
+    def dict(self):
+        return dict(
+            post_id=self.post_id,
+            message_id=self.message_id,
+            creator=self.creator,
+            channel=self.channel,
+            type=self.type,
+            mime_type=self.mime_type,
+            group=self.group_hash,
+            created_date=self.created_date,
+            tags=self.tags,
+            links=dict(
+                links_per_row=self.links.links_per_row,
+                links=[
+                    {'label': i.label, 'url': i.url} for i in self.links.links
+                ]
+            ),
+            source=dict(
+                label=self.source.label,
+                url=self.source.url
+            ),
+            reactions=[
+                dict(emoji=i.emoji, count=i.count) for i in self.reactions.reactions
+            ],
+            audio=dict(
+                file_id=self.file_id,
+                file_size=self.file_size,
+                performer=self.performer,
+                title=self.title
+            ),
+            thumbnail=dict(
+                file_id=self.thumbnail_file_id,
+                file_size=self.thumbnail_size
+            ),
+            caption=self.caption
+        )
 
 
 class DocumentPost(PostModel):
@@ -164,9 +416,154 @@ class DocumentPost(PostModel):
     caption = fields.CharField(verbose_name='caption', mongo_name='caption', default=None)
     file_name = fields.CharField(verbose_name='file_name', mongo_name='fileName', default=None)
 
+    @property
+    def dict(self):
+        return dict(
+            post_id=self.post_id,
+            message_id=self.message_id,
+            creator=self.creator,
+            channel=self.channel,
+            type=self.type,
+            mime_type=self.mime_type,
+            group=self.group_hash,
+            created_date=self.created_date,
+            tags=self.tags,
+            links=dict(
+                links_per_row=self.links.links_per_row,
+                links=[
+                    {'label': i.label, 'url': i.url} for i in self.links.links
+                ]
+            ),
+            source=dict(
+                label=self.source.label,
+                url=self.source.url
+            ),
+            reactions=[
+                dict(emoji=i.emoji, count=i.count) for i in self.reactions.reactions
+            ],
+            file=dict(
+                file_id=self.file_id,
+                file_size=self.file_size,
+                file_name=self.file_name
+            ),
+            thumbnail=dict(
+                file_id=self.thumbnail_file_id,
+                file_size=self.thumbnail_size
+            ),
+            caption=self.caption
+        )
+
 
 class TextPost(PostModel):
     text = fields.CharField(required=True, verbose_name='text', mongo_name='text', default='')
+
+    @property
+    def dict(self):
+        return dict(
+            post_id=self.post_id,
+            message_id=self.message_id,
+            creator=self.creator,
+            channel=self.channel,
+            type=self.type,
+            mime_type=self.mime_type,
+            group=self.group_hash,
+            created_date=self.created_date,
+            tags=self.tags,
+            links=dict(
+                links_per_row=self.links.links_per_row,
+                links=[
+                    {'label': i.label, 'url': i.url} for i in self.links.links
+                ]
+            ),
+            source=dict(
+                label=self.source.label,
+                url=self.source.url
+            ),
+            reactions=[
+                dict(emoji=i.emoji, count=i.count) for i in self.reactions.reactions
+            ],
+            text=self.text
+        )
+
+
+class LocationPost(PostModel):
+    latitude = fields.FloatField(required=True, verbose_name='location_latitude', mongo_name='latitude')
+    longitude = fields.FloatField(required=True, verbose_name='location_longitude', mongo_name='longitude')
+
+    @property
+    def dict(self):
+        return dict(
+            post_id=self.post_id,
+            message_id=self.message_id,
+            creator=self.creator,
+            channel=self.channel,
+            type=self.type,
+            mime_type=self.mime_type,
+            group=self.group_hash,
+            created_date=self.created_date,
+            tags=self.tags,
+            links=dict(
+                links_per_row=self.links.links_per_row,
+                links=[
+                    {'label': i.label, 'url': i.url} for i in self.links.links
+                ]
+            ),
+            source=dict(
+                label=self.source.label,
+                url=self.source.url
+            ),
+            reactions=[
+                dict(emoji=i.emoji, count=i.count) for i in self.reactions.reactions
+            ],
+            location=dict(
+                latitude=self.latitude,
+                longitude=self.longitude
+            )
+        )
+
+
+class VenuePost(LocationPost):
+    title = fields.CharField(required=True, verbose_name='venue_title', mongo_name='title')
+    address = fields.CharField(required=True, verbose_name='venue_address', mongo_name='address')
+    foursquare_id = fields.CharField(verbose_name='foursquare_id', mongo_name='foursquareId', default=None)
+    foursquare_type = fields.CharField(verbose_name='foursquare_type', mongo_name='foursquareType', default=None)
+
+    @property
+    def dict(self):
+        return dict(
+            post_id=self.post_id,
+            message_id=self.message_id,
+            creator=self.creator,
+            channel=self.channel,
+            type=self.type,
+            mime_type=self.mime_type,
+            group=self.group_hash,
+            created_date=self.created_date,
+            tags=self.tags,
+            links=dict(
+                links_per_row=self.links.links_per_row,
+                links=[
+                    {'label': i.label, 'url': i.url} for i in self.links.links
+                ]
+            ),
+            source=dict(
+                label=self.source.label,
+                url=self.source.url
+            ),
+            reactions=[
+                dict(emoji=i.emoji, count=i.count) for i in self.reactions.reactions
+            ],
+            venue=dict(
+                location=dict(
+                    latitude=self.latitude,
+                    longitude=self.longitude
+                ),
+                title=self.title,
+                address=self.address,
+                foursquare_id=self.foursquare_id,
+                foursquare_type=self.foursquare_type
+            )
+        )
 
 
 class Posts(MongoModel):
