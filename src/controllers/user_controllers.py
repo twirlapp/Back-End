@@ -348,8 +348,8 @@ async def get_users(user_id: int = None, user_ids: List[int] = None)-> Union[Use
         raise
 
 
-def get_bots(bot_id: int = None, bot_ids: List[int] = None,
-             bot_token: str = None, bot_tokens: List[str] = None)-> Union[Bot, Iterable[Bot]]:
+async def get_bots(bot_id: int = None, bot_ids: List[int] = None,
+                   bot_token: str = None, bot_tokens: List[str] = None)-> Union[Bot, Iterable[Bot]]:
     """
 
     Gets a single user, or an iterable array of users from the database. Required either `bot_id`, `bot_ids`,

@@ -21,27 +21,6 @@
 # SUCH DAMAGES.
 #
 
-from quart import Quart  # , request
-import blueprints
-import gc
+import blueprints.tpages_api
 
-gc.enable()
-
-app = Quart(__name__, host_matching=True, static_host='myloc.al')
-app.config['SERVER_NAME'] = 'myloc.al'
-
-# Register all blueprints
-for blueprint in blueprints.__all__:
-    plugins = eval(blueprint)
-    for plugin in plugins.__all__:
-        app_api = eval((blueprint + '.' + plugin))
-        app.register_blueprint(app_api)
-
-
-@app.route('/')
-async def hello_world():
-    return ''
-
-
-if __name__ == '__main__':
-    app.run(port=80)
+__all__ = ['blueprints.tpages_api']

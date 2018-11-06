@@ -22,10 +22,12 @@
 #
 
 from src.controllers.app_controllers import is_app_authorized
-from src.utils.json_handlers import api_response, SuperDict
-from src.utils.security import hash_generator
+from src.controllers.user_controllers import get_users
+from src.utils.json_handlers import api_response, SuperDict, decode
+# from src.utils.security import hash_generator
 from functools import wraps
 from quart import Response, request
+from itsdangerous import URLSafeTimedSerializer, BadTimeSignature, SignatureExpired
 from typing import Callable
 from threading import Thread
 import time
@@ -41,7 +43,7 @@ def app_auth_required(func: Callable):
         headers = request.headers
         _auth = headers.get('Authorization', None)
         auth: str = _auth if _auth is not None else request.authorization
-        if auth is None or (len(auth.split(' ')) < 2) or not is_app_authorized(auth.split(' ')[1]):
+        if auth is None or (len(auth.split(' ')) < 2) or not await is_app_authorized(auth.split(' ')[1]):
             return_data = await api_response(success=False, op=func.__name__, msg="Unauthorized Application.",
                                              error='#APP_NOT_AUTHORIZED')
             return Response(return_data, status=401, mimetype='application/json', content_type='application/json', )
@@ -59,13 +61,27 @@ def user_auth_required(func: Callable):
         headers = request.headers
         auth_hash = headers.get('Auth-Hash', None)
         user_id = headers.get('User-Id', None)
-        if (user_id is None and auth_hash is None) or (user_id is None or auth_hash is None) or \
-                auth_hash != hash_generator(str(user_id) + str(config.APP_TEMP_SECRET_KEY), hash_type='sha256'):
+        if (user_id is None and auth_hash is None) or (user_id is None or auth_hash is None):
+            return_data = await api_response(success=False, op=func.__name__, msg='Missing Authentication Headers.')
+            return Response(return_data, status=406, mimetype='application/json', content_type='application/json', )
+        try:
+            serializer = URLSafeTimedSerializer(secret_key=config.APP_TEMP_SECRET_KEY)
+            age = config.LAST_UPDATE - (time.time() + 120)
+            deserialized = await decode(serializer.loads(auth_hash, max_age=age, salt=str(user_id)))
+            # noinspection PyBroadException
+            try:
+                user = await get_users(user_id=deserialized['user_id'])
+            except Exception:
+                user = None
+            if str(deserialized['user_id']) != str(user_id) or \
+                    str(deserialized['SSID']) != str(config.APP_SECRET_KEY) or user is None:
+                raise BadTimeSignature('')
+        except (SignatureExpired, BadTimeSignature):
             return_data = await api_response(False, op=func.__name__, msg='User access not authenticated.',
                                              error='#USER_ACCESS_NOT_AUTHENTICATED')
             return Response(return_data, status=403, mimetype='application/json', content_type='application/json', )
-        else:
-            return await func(*args, **kwargs)
+
+        return await func(*args, **kwargs)
     return decorator
 
 
@@ -116,17 +132,25 @@ class request_limit:
             headers = request.headers
             auth_hash = headers.get('Auth-Hash', None)
             user_id = headers.get('User-Id', None)
-            if (auth_hash is None and user_id is None) or (auth_hash is None or user_id is None):
-                return_data = await api_response(False, op=func.__name__, msg='No user authentication.',
+            if (user_id is None and auth_hash is None) or (user_id is None or auth_hash is None):
+                return_data = await api_response(success=False, op=func.__name__, msg='Missing Authentication Headers.')
+                return Response(return_data, status=406, mimetype='application/json', content_type='application/json', )
+            try:
+                serializer = URLSafeTimedSerializer(secret_key=config.APP_TEMP_SECRET_KEY)
+                age = config.LAST_UPDATE - (time.time() + 120)
+                deserialized = await decode(serializer.loads(auth_hash, max_age=age, salt=str(user_id)))
+                # noinspection PyBroadException
+                try:
+                    user = await get_users(user_id=deserialized['user_id'])
+                except Exception:
+                    user = None
+                if str(deserialized['user_id']) != str(user_id) or \
+                        str(deserialized['SSID']) != str(config.APP_SECRET_KEY) or user is None:
+                    raise BadTimeSignature('')
+            except (SignatureExpired, BadTimeSignature):
+                return_data = await api_response(False, op=func.__name__, msg='User access not authenticated.',
                                                  error='#USER_ACCESS_NOT_AUTHENTICATED')
-                return Response(return_data, status=403, mimetype='application/json',
-                                content_type='application/json', )
-            elif auth_hash != hash_generator(str(user_id) + str(config.APP_TEMP_SECRET_KEY), hash_type='sha256'):
-                return_data = await api_response(False, op=func.__name__,
-                                                 msg='User not Authenticated.',
-                                                 error='#USER_ACCESS_NOT_AUTHENTICATED')
-                return Response(return_data, status=403, mimetype='application/json',
-                                content_type='application/json', )
+                return Response(return_data, status=403, mimetype='application/json', content_type='application/json', )
             else:
                 now = time.time()
                 if auth_hash not in self._data:

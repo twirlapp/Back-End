@@ -21,3 +21,7 @@
 # SUCH DAMAGES.
 #
 
+from .channels_handler import channels_api
+from .users_handler import users_api
+
+__all__ = ['channels_api', 'users_api']

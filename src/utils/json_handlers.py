@@ -33,7 +33,7 @@ async def encode(*args, **kwargs)-> Union[Awaitable, str]:
     :param kwargs:
     :return: An awaitable encoding
     """
-    encoder = to_async(ujson.encode)
+    encoder = to_async(ujson.dumps)
     return await encoder(*args, **kwargs)
 
 
@@ -44,7 +44,7 @@ async def decode(*args, **kwargs)-> Union[Awaitable, dict]:
     :param kwargs:
     :return: An awaitable decoding
     """
-    decoder = to_async(ujson.decode)
+    decoder = to_async(ujson.loads)
     return await decoder(*args, **kwargs)
 
 

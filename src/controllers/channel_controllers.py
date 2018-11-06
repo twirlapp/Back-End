@@ -24,7 +24,7 @@
 from ..models.user_models import User, Bot
 from ..models.post_models import PostModel, Posts
 from ..models.channels_model import Channel, ChannelAdmin
-from ..utils.function_handlers import to_async
+from ..utils.function_handlers import to_async, temp_lru_cache
 from typing import List, Union, Iterable
 from .user_controllers import get_users, get_bots
 import datetime
@@ -32,6 +32,9 @@ import datetime
 
 class ChannelAlreadyAdded(BaseException):
     pass
+
+
+__CACHE = temp_lru_cache(4096)
 
 
 async def add_channel(channel_id: int, user_id: int=None, user_model: User = None, *,
@@ -82,6 +85,7 @@ async def add_channel(channel_id: int, user_id: int=None, user_model: User = Non
             if channel.is_valid():
                 save = to_async(channel.save)
                 await save(full_clean=True)
+                __CACHE[channel.chid] = channel
             else:
                 raise channel.full_clean()
 
@@ -140,6 +144,7 @@ async def add_admins(channel_model: Channel = None, channel_id: int = None, *,
             return False
         save = to_async(channel.save)
         await save(full_clean=True)
+        __CACHE[channel.chid] = channel
     except Channel.DoesNotExist:
         raise
     return True
@@ -177,6 +182,7 @@ async def remove_admins(channel_model: Channel = None, channel_id: int = None, *
             return False
         save = to_async(channel.save)
         await save()
+        __CACHE[channel.chid] = channel
 
         return True
     except Channel.DoesNotExist:
@@ -215,6 +221,7 @@ async def edit_channel_bot(user_model: User = None, user_id: int = None,
                 channel.channel_bot = bot
                 save = to_async(channel.save)
                 await save()
+                __CACHE[channel.chid] = channel
                 return True
         else:
             return False
@@ -259,6 +266,7 @@ async def edit_channel_info(channel_model: Channel = None, channel_id: int = Non
         if channel.is_valid():
             save = to_async(channel.save)
             await save(full_clean=True)
+            __CACHE[channel.chid] = channel
             return channel
         else:
             raise channel.full_clean()
@@ -292,6 +300,7 @@ async def delete_channel(channel_model: Channel = None, channel_id: int = None)-
             await posts_update({'isDeleted': True, 'deletedDate': now})
             await posts_clt_update({'isDeleted': True, 'deletedDate': now})
             await save(full_clean=True)
+            del __CACHE[channel.chid]
             return True
         else:
             raise channel.full_clean()
@@ -305,10 +314,14 @@ async def get_channels(channel_id: int = None, channel_ids: List[int] = None)-> 
         get = to_async(Channel.objects.get)
         raw = to_async(Channel.objects.raw)
         if channel_id is not None:
-            channel = await get({'channelId': channel_id, 'isDeleted': False})
+            channel = __CACHE[channel_id]
+            if channel is None:
+                channel = await get({'channelId': channel_id, 'isDeleted': False})
             return channel
         elif channel_ids is not None:
             channels = await raw({'channelId': {'$in': channel_id}, 'isDeleted': False})
+            for channel in channels:
+                __CACHE[channel.chid] = channel
             return channels
         else:
             raise Channel.DoesNotExist

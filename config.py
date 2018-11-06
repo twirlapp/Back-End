@@ -31,6 +31,7 @@ from threading import Thread
 APP_SECRET_KEY = 'Some Secret Unicode Key'
 
 APP_TEMP_SECRET_KEY = id_generator(32, )
+LAST_UPDATE = time.time()
 
 
 def __reset_temp_key():
@@ -38,8 +39,10 @@ def __reset_temp_key():
     Simple function that runs forever and cleans the temporary secret key every 4 hours
     """
     global APP_TEMP_SECRET_KEY
+    global LAST_UPDATE
     while True:
         APP_TEMP_SECRET_KEY = id_generator(32, )
+        LAST_UPDATE += (60*60) * 4
         time.sleep((60*60) * 4)
 
 

@@ -32,9 +32,13 @@ from .user_controllers import get_users
 from .channel_controllers import get_channels
 from typing import List, Union, Dict, Iterable
 from ..utils.security import id_generator, hash_generator
-from ..utils.function_handlers import to_async, async_lru
+from ..utils.function_handlers import to_async, temp_lru_cache
 from .reaction_controllers import create_reaction
 import datetime
+
+
+__POST_CACHE = temp_lru_cache(max_size=8192)
+__POST_GROUP_CACHE = temp_lru_cache(max_size=2048)
 
 
 async def add_post_group(posts: List[PostModel],
@@ -76,6 +80,9 @@ async def add_post_group(posts: List[PostModel],
             posts_group = await raw({'postId': {'$in': post_strings}})
             update = to_async(posts_group.update)
             await update({'$set': {'groupHash': posts_hash}})
+            __POST_GROUP_CACHE[_posts.posts_hash] = _posts
+            for post in posts:
+                __POST_CACHE[post.post_id] = post
         else:
             raise _posts.full_clean()
 
@@ -109,6 +116,9 @@ async def remove_post_group(group_model: Posts = None, group_hash: str = None)->
             await posts_update(data)
             group_save = to_async(posts_group.save)
             await group_save(full_clean=True)
+            del __POST_GROUP_CACHE[posts_group.posts_hash]
+            for post in posts_group.posts:
+                del __POST_GROUP_CACHE[post]
             return True
         else:
             raise posts_group.full_clean()
@@ -116,7 +126,6 @@ async def remove_post_group(group_model: Posts = None, group_hash: str = None)->
         return False
 
 
-@async_lru(max_size=1024)
 async def get_post_group(group_hash: str)-> Posts:
     """
     Gets a model instance of a Post group
@@ -125,7 +134,10 @@ async def get_post_group(group_hash: str)-> Posts:
     """
     try:
         get = to_async(Posts.objects.get)
-        return await get({'groupHash': group_hash})
+        post_group = __POST_GROUP_CACHE[group_hash]
+        if post_group is None:
+            post_group = await get({'groupHash': group_hash})
+        return post_group
     except Posts.DoesNotExist:
         raise
 
@@ -225,7 +237,7 @@ async def add_text_post(user_model: User = None, user_id: int = None,
             await save(full_clean=True)
             global_analytics.added_posts += 1
             global_analytics.save()
-
+            __POST_CACHE[text_post.post_id] = text_post
         else:
             raise text_post.full_clean()
 
@@ -353,6 +365,7 @@ async def add_image_post(user_model: User = None, user_id: int = None,
 
             global_analytics.added_posts += 1
             global_analytics.save()
+            __POST_CACHE[image_post.post_id] = image_post
 
         else:
             raise image_post.full_clean()
@@ -486,6 +499,7 @@ async def add_video_post(user_model: User = None, user_id: int = None,
 
             global_analytics.added_posts += 1
             global_analytics.save()
+            __POST_CACHE[video_post.post_id] = video_post
 
         else:
             raise video_post.full_clean()
@@ -616,6 +630,7 @@ async def add_video_note_post(user_model: User = None, user_id: int = None,
 
             global_analytics.added_posts += 1
             global_analytics.save()
+            __POST_CACHE[video_note_post.post_id] = video_note_post
 
         else:
             raise video_note_post.full_clean()
@@ -752,6 +767,7 @@ async def add_animation_post(user_model: User = None, user_id: int = None,
 
             global_analytics.added_posts += 1
             global_analytics.save()
+            __POST_CACHE[animation_post.post_id] = animation_post
 
         else:
             raise animation_post.full_clean()
@@ -871,6 +887,7 @@ async def add_voice_post(user_model: User = None, user_id: int = None,
 
             global_analytics.added_posts += 1
             global_analytics.save()
+            __POST_CACHE[voice_post.post_id] = voice_post
 
         else:
             raise voice_post.full_clean()
@@ -1006,6 +1023,7 @@ async def add_audio_post(user_model: User = None, user_id: int = None,
 
             global_analytics.added_posts += 1
             global_analytics.save()
+            __POST_CACHE[audio_post.post_id] = audio_post
 
         else:
             raise audio_post.full_clean()
@@ -1135,6 +1153,7 @@ async def add_file_post(user_model: User = None, user_id: int = None,
 
             global_analytics.added_posts += 1
             global_analytics.save()
+            __POST_CACHE[document_post.post_id] = document_post
 
         else:
             raise document_post.full_clean()
@@ -1248,6 +1267,7 @@ async def add_location(user_model: User = None, user_id: int = None,
 
             global_analytics.added_posts += 1
             global_analytics.save()
+            __POST_CACHE[location_post.post_id] = location_post
 
         else:
             raise location_post.full_clean()
@@ -1375,6 +1395,7 @@ async def add_venue(user_model: User = None, user_id: int = None,
 
             global_analytics.added_posts += 1
             global_analytics.save()
+            __POST_CACHE[venue_post.post_id] = venue_post
 
         else:
             raise venue_post.full_clean()
@@ -1406,6 +1427,7 @@ async def remove_post(post_model: PostModel = None, post_id: str = None)-> bool:
             await update({'$set': {'deletedDate': datetime.datetime.utcnow(), 'isDeleted': True}})
             save = to_async(post.save)
             await save(full_clean=True)
+            del __POST_CACHE[post.post_id]
             return True
         else:
             raise post.full_clean()
@@ -1425,9 +1447,13 @@ async def get_posts(post_id: str = None, post_ids: List[str] = None)-> Union[Pos
         get = to_async(PostModel.objects.get)
         raw = to_async(PostModel.objects.raw)
         if post_id is not None:
-            posts = await get({'postId': post_id, 'isDeleted': False})
+            posts = __POST_CACHE[post_id]
+            if posts is None:
+                posts = await get({'postId': post_id, 'isDeleted': False})
         elif post_ids is not None:
             posts = await raw({'postId': {'$in': post_ids}, 'isDeleted': False})
+            for post in posts:
+                __POST_CACHE[post.post_id] = post
         else:
             raise PostModel.DoesNotExist
         return posts

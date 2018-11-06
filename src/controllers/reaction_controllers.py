@@ -23,12 +23,14 @@
 
 from ..models.user_models import User
 from ..models.post_models import PostModel
-from .post_controllers import get_posts
-from ..utils.function_handlers import to_async
+from ..utils.function_handlers import to_async, temp_lru_cache
 from ..models.reactions_model import Reaction, ReactionObj, UserReaction
 from typing import List, Union, Dict
 import datetime
 from functools import lru_cache
+
+
+__CACHE = temp_lru_cache(max_size=4096)
 
 
 @lru_cache(maxsize=2048)
@@ -80,6 +82,7 @@ async def user_reaction(user_model: User = None, user_id: int = None, *, post_id
     :param index: The index of the reaction emoji the user reacted.
     :return: [UserReaction] instance proving the success of the transaction
     """
+    from .post_controllers import get_posts
     try:
         user = user_model.uid if user_model is not None else user_id
         post = await get_posts(post_id=post_id)
@@ -114,7 +117,7 @@ async def user_reaction(user_model: User = None, user_id: int = None, *, post_id
         raise
 
 
-def remove_user_reaction(user_model: User = None, user_id: int = None, *, post_id: str)-> bool:
+async def remove_user_reaction(user_model: User = None, user_id: int = None, *, post_id: str)-> bool:
     """
     Removes a reaction given by an user.
     :param user_model: user reference model to identify the reaction.
@@ -123,6 +126,7 @@ def remove_user_reaction(user_model: User = None, user_id: int = None, *, post_i
     :return: True if deleted, False if the user was never added, or the Exception raised by the data validation
              (less likely to happen).
     """
+    from .post_controllers import get_posts
     try:
         user = user_model.uid if user_model is not None else user_id
         post = await get_posts(post_id=post_id)

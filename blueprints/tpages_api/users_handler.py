@@ -24,8 +24,9 @@
 from quart import Blueprint, request, Response
 from src.controllers import user_controllers
 from .api_utils import app_auth_required, json_content_type_required, error_response, request_limit, user_auth_required
-from src.utils.json_handlers import api_request, api_response, SuperDict
-from src.utils.security import hash_generator
+from src.utils.json_handlers import api_request, api_response, SuperDict, encode
+# from src.utils.security import hash_generator
+from itsdangerous import URLSafeTimedSerializer
 import traceback
 import bcrypt
 import config
@@ -149,7 +150,10 @@ async def auth_user()-> Response:
                                              error='#USER_NOT_AUTHENTICATED')
             return Response(return_data, status=403, mimetype='application/json', content_type='application/json', )
         else:
-            new_hash = hash_generator((str(user.uid) + config.APP_TEMP_SECRET_KEY), hash_type='sha256')
+            serializer = URLSafeTimedSerializer(secret_key=config.APP_TEMP_SECRET_KEY)
+            # new_hash = hash_generator((str(user.uid) + config.APP_TEMP_SECRET_KEY), hash_type='sha256')
+            new_hash = serializer.dumps(await encode({'user_id': user.uid, 'SSID': config.APP_SECRET_KEY}),
+                                        salt=str(user.uid))
             return_data = await api_response(success=True, op=auth_user.__name__, msg='User is now authenticated.')
             res = Response(return_data, status=200, mimetype='application/json', content_type='application/json', )
             res.headers.add('Use-Auth-Hash', True)
@@ -805,7 +809,7 @@ async def edit_bot(bot_id: int)-> Response:  # Returns 'application/json'
     # noinspection PyBroadException
     try:
         user = await user_controllers.get_users(user_id=int(data.owner_info.user_id))
-        bot = user_controllers.get_bots(bot_id=bot_id)
+        bot = await user_controllers.get_bots(bot_id=bot_id)
 
         if bot.owner != user.uid:
             return_data = await api_response(False, op=edit_bot.__name__, msg='User can not edit bot.',
@@ -899,7 +903,7 @@ async def remove_bot(bot_id: int)-> Response:  # Returns 'application/json'
     # noinspection PyBroadException
     try:
         user = await user_controllers.get_users(user_id=int(data.owner_info.user_id))
-        bot = user_controllers.get_bots(bot_id=bot_id)
+        bot = await user_controllers.get_bots(bot_id=bot_id)
 
         if bot.owner != user.uid:
             return_data = await api_response(False, op=remove_bot.__name__, msg='User can not edit bot.',
