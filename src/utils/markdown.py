@@ -25,14 +25,13 @@ import re
 
 class Markdown:
     """
-    Class with operations to convert Markdown strings to HTML, parse Markdown strings to verify validity, or
-    escape strings for special entities, such as @user_name, #hash_tag or http://www.my_link.com/
+    Class with operations to parse Markdown strings to verify validity, or escape strings for special entities,
+    such as @user_name, #hash_tag or http://www.my_link.com/
 
     This markdown complies with Telegram's markdown style, which can be seen at
     https://core.telegram.org/bots/api#formatting-options
     """
     MARKDOWN_CHARS = ('*', '_', '`', '```', '[', ']', '(', ')', )
-    HTML_TAGS = ('b', 'i', 'a', 'pre', 'code', )
     USERNAME_ENTITY_REGEX = re.compile('(^@[\w_]{5,})')
     HASHTAG_ENTITY_REGEX = re.compile('(^#[\S_]+)')
     LINK_ENTITY_REGEX = re.compile('(([a-z]+:(//)?)?[\w._\-]+(@?)[.\w]{3,}(/?[^\s]+))')
