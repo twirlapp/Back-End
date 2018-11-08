@@ -24,7 +24,6 @@
 from src.controllers.app_controllers import is_app_authorized
 from src.controllers.user_controllers import get_users
 from src.utils.json_handlers import api_response, SuperDict, decode
-# from src.utils.security import hash_generator
 from functools import wraps
 from quart import Response, request
 from itsdangerous import URLSafeTimedSerializer, BadTimeSignature, SignatureExpired
