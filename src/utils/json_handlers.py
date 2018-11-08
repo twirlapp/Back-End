@@ -28,7 +28,7 @@ from .function_handlers import to_async
 
 async def encode(*args, **kwargs)-> Union[Awaitable, str]:
     """
-    Receives data to be encoded
+    Receives data to be encoded from Python dicts to JSON
     :param args:
     :param kwargs:
     :return: An awaitable encoding
@@ -39,7 +39,7 @@ async def encode(*args, **kwargs)-> Union[Awaitable, str]:
 
 async def decode(*args, **kwargs)-> Union[Awaitable, dict]:
     """
-    Receives data to be decoded
+    Receives data to be decoded from JSON to Python dicts
     :param args:
     :param kwargs:
     :return: An awaitable decoding
