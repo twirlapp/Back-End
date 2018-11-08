@@ -25,7 +25,6 @@ from quart import Blueprint, request, Response
 from src.controllers import user_controllers
 from .api_utils import app_auth_required, json_content_type_required, error_response, request_limit, user_auth_required
 from src.utils.json_handlers import api_request, api_response, SuperDict, encode
-# from src.utils.security import hash_generator
 from itsdangerous import URLSafeTimedSerializer
 import traceback
 import bcrypt

@@ -144,7 +144,7 @@ class ImagePost(PostModel):
     file_id = fields.CharField(required=True, verbose_name='file_id', mongo_name='fileId')
     thumbnail_file_id = fields.CharField(verbose_name='thumbnail_file_id', mongo_name='thumbFileId', default=None)
     thumbnail_size = fields.IntegerField(verbose_name='thumbnail_size', mongo_name='thumbSize', default=None)
-    file_size = fields.IntegerField(verbose_name='file_size', mongo_name='fileSize', default=None)
+    file_size = fields.IntegerField(required=True, verbose_name='file_size', mongo_name='fileSize')
     caption = fields.CharField(verbose_name='caption', mongo_name='caption', default=None)
     width = fields.IntegerField(verbose_name='width', mongo_name='width', required=True)
     height = fields.IntegerField(verbose_name='height', mongo_name='height', required=True)
@@ -178,13 +178,13 @@ class ImagePost(PostModel):
                 file_id=self.file_id,
                 file_size=self.file_size,
                 width=self.width,
-                height=self.height
-            ),
-            thumbnail=dict(
-                file_id=self.thumbnail_file_id,
-                file_size=self.thumbnail_size
-            ),
-            caption=self.caption
+                height=self.height,
+                thumbnail=dict(
+                    file_id=self.thumbnail_file_id,
+                    file_size=self.thumbnail_size
+                ),
+                caption=self.caption
+            )
         )
 
 
@@ -226,13 +226,13 @@ class VideoNotePost(PostModel):
                 file_id=self.file_id,
                 file_size=self.file_size,
                 length=self.length,
-                duration=self.duration
-            ),
-            thumbnail=dict(
-                file_id=self.thumbnail_file_id,
-                file_size=self.thumbnail_size
-            ),
-            caption=self.caption
+                duration=self.duration,
+                thumbnail=dict(
+                    file_id=self.thumbnail_file_id,
+                    file_size=self.thumbnail_size
+                ),
+                caption=self.caption
+            )
         )
 
 
@@ -269,13 +269,13 @@ class VideoPost(ImagePost):
                 file_size=self.file_size,
                 width=self.width,
                 height=self.height,
-                duration=self.duration
-            ),
-            thumbnail=dict(
-                file_id=self.thumbnail_file_id,
-                file_size=self.thumbnail_size
-            ),
-            caption=self.caption
+                duration=self.duration,
+                thumbnail=dict(
+                    file_id=self.thumbnail_file_id,
+                    file_size=self.thumbnail_size
+                ),
+                caption=self.caption
+            )
         )
 
 
@@ -313,13 +313,13 @@ class AnimationPost(VideoPost):
                 width=self.width,
                 height=self.height,
                 duration=self.duration,
-                file_name=self.file_name
-            ),
-            thumbnail=dict(
-                file_id=self.thumbnail_file_id,
-                file_size=self.thumbnail_size
-            ),
-            caption=self.caption
+                file_name=self.file_name,
+                thumbnail=dict(
+                    file_id=self.thumbnail_file_id,
+                    file_size=self.thumbnail_size
+                ),
+                caption=self.caption
+            )
         )
 
 
@@ -357,9 +357,9 @@ class VoicePost(PostModel):
             voice=dict(
                 file_id=self.file_id,
                 file_size=self.file_size,
-                duration=self.duration
-            ),
-            caption=self.caption
+                duration=self.duration,
+                caption=self.caption
+            )
         )
 
 
@@ -398,13 +398,14 @@ class AudioPost(VoicePost):
                 file_id=self.file_id,
                 file_size=self.file_size,
                 performer=self.performer,
-                title=self.title
-            ),
-            thumbnail=dict(
-                file_id=self.thumbnail_file_id,
-                file_size=self.thumbnail_size
-            ),
-            caption=self.caption
+                duration=self.duration,
+                title=self.title,
+                thumbnail=dict(
+                    file_id=self.thumbnail_file_id,
+                    file_size=self.thumbnail_size
+                ),
+                caption=self.caption
+            )
         )
 
 
@@ -444,13 +445,13 @@ class DocumentPost(PostModel):
             file=dict(
                 file_id=self.file_id,
                 file_size=self.file_size,
-                file_name=self.file_name
-            ),
-            thumbnail=dict(
-                file_id=self.thumbnail_file_id,
-                file_size=self.thumbnail_size
-            ),
-            caption=self.caption
+                file_name=self.file_name,
+                thumbnail=dict(
+                    file_id=self.thumbnail_file_id,
+                    file_size=self.thumbnail_size
+                ),
+                caption=self.caption
+            )
         )
 
 

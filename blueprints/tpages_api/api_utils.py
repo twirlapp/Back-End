@@ -135,6 +135,7 @@ class request_limit:
             if (user_id is None and auth_hash is None) or (user_id is None or auth_hash is None):
                 return_data = await api_response(success=False, op=func.__name__, msg='Missing Authentication Headers.')
                 return Response(return_data, status=406, mimetype='application/json', content_type='application/json', )
+
             try:
                 serializer = URLSafeTimedSerializer(secret_key=config.APP_TEMP_SECRET_KEY)
                 age = config.LAST_UPDATE - (time.time() + 120)

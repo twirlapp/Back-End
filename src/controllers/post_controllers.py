@@ -1171,7 +1171,6 @@ async def add_location(user_model: User = None, user_id: int = None,
                        message_id: int,
                        latitude: str,
                        longitude: int,
-                       caption: str = None, tags: List[str] = None,
                        source: Link = None,
                        source_map: Dict[str, str] = None,
                        links: LinkList = None,
@@ -1188,8 +1187,6 @@ async def add_location(user_model: User = None, user_id: int = None,
     :param message_id: The Telegram's message ID to identify a message in a channel
     :param latitude: The latitude of the location
     :param longitude: The longitude of the location
-    :param caption: A caption is a small text, up to 1024 characters, that can be presented with the file
-    :param tags: The tags detected within the Post
     :param source: The source of the Post. This is either a [Link] object, or a dict that maps the data for a [Link]
     :param source_map: The source of the Post. This is either a [Link] object, or a dict that maps the data for a [Link]
     :param links: The links of the post. This is either a [LinkList] object, or a dict that maps the data for a
@@ -1252,14 +1249,10 @@ async def add_location(user_model: User = None, user_id: int = None,
 
         if _reactions is not None:
             location_post.reactions = _reactions
-        if tags is not None:
-            location_post.tags = tags
         if _source is not None:
             location_post.source = _source
         if _links is not None:
             location_post.links = _links
-        if caption is not None:
-            location_post.caption = caption
 
         if location_post.is_valid():
             save = to_async(location_post.save)
@@ -1289,7 +1282,6 @@ async def add_venue(user_model: User = None, user_id: int = None,
                     address: str,
                     foursquare_id: str = None,
                     foursquare_type: str = None,
-                    caption: str = None, tags: List[str] = None,
                     source: Link = None,
                     source_map: Dict[str, str] = None,
                     links: LinkList = None,
@@ -1310,8 +1302,6 @@ async def add_venue(user_model: User = None, user_id: int = None,
     :param address: Address of the Venue
     :param foursquare_id: FourSquare Unique identifier of the Venue
     :param foursquare_type: FourSquare type of Venue (For example, “arts_entertainment/aquarium” or “food/icecream”)
-    :param caption: A caption is a small text, up to 1024 characters, that can be presented with the file
-    :param tags: The tags detected within the Post
     :param source: The source of the Post. This is either a [Link] object, or a dict that maps the data for a [Link]
     :param source_map: The source of the Post. This is either a [Link] object, or a dict that maps the data for a [Link]
     :param links: The links of the post. This is either a [LinkList] object, or a dict that maps the data for a
@@ -1376,14 +1366,10 @@ async def add_venue(user_model: User = None, user_id: int = None,
 
         if _reactions is not None:
             venue_post.reactions = _reactions
-        if tags is not None:
-            venue_post.tags = tags
         if _source is not None:
             venue_post.source = _source
         if _links is not None:
             venue_post.links = _links
-        if caption is not None:
-            venue_post.caption = caption
         if foursquare_id is not None:
             venue_post.foursquare_id = foursquare_id
         if foursquare_type is not None:
@@ -1489,9 +1475,9 @@ def _create_link_list(links_map: Union[Dict[str, List[Dict[str, str]]], Dict[str
     link_list = None
 
     listed_link_list = links_map.get('links', None)
-    row_num = links_map.get('row_num', None)
+    links_per_row = links_map.get('links_per_row', None)
 
-    if listed_link_list is not None and row_num is not None:
+    if listed_link_list is not None and links_per_row is not None:
         link_list = []
         for _link_map in listed_link_list:
             _link = _create_link(_link_map)
@@ -1500,7 +1486,7 @@ def _create_link_list(links_map: Union[Dict[str, List[Dict[str, str]]], Dict[str
 
         return LinkList(
             links=link_list,
-            links_per_row=row_num
+            links_per_row=links_per_row
         )
 
     return link_list
