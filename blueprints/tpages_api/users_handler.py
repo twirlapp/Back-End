@@ -69,7 +69,7 @@ def verify_bot(request_data: SuperDict)-> bool:
     return valid
 
 
-@users_api.route('/users/auth', methods=('POST', ))
+@users_api.route('/users/auth/', methods=('POST', ))
 @app_auth_required
 @json_content_type_required
 async def auth_user()-> Response:
@@ -167,7 +167,7 @@ async def auth_user()-> Response:
         return await error_response(add_users.__name__, traceback.format_exc())
 
 
-@users_api.route('/users/add', methods=('POST', ), )
+@users_api.route('/users/add/', methods=('POST', ), )
 @app_auth_required
 @json_content_type_required
 async def add_users()-> Response:  # Returns 'application/json'
@@ -292,7 +292,8 @@ async def add_users()-> Response:  # Returns 'application/json'
         return await error_response(add_users.__name__, traceback.format_exc())
 
 
-@users_api.route('/users/get/<int:user_id>', methods=('GET', ))
+@users_api.route('/users/get/<int:user_id>/', methods=('GET', ))
+@users_api.route('/users/get/', methods=('GET', ), defaults={'user_id': None})
 @app_auth_required
 @user_auth_required
 @request_limit(max_requests=200)
@@ -349,6 +350,10 @@ async def get_user(user_id: int)-> Response:  # Returns 'application/json'
                  "stack_trace": str (Python stacktrace)
              }
     """
+    if user_id is None:
+        return_data = await api_response(success=False, op=get_user.__name__, msg='Malformed request data.',
+                                         error='#MALFORMED_REQUEST')
+        return Response(return_data, status=400, mimetype='application/json', content_type='application/json', )
     # noinspection PyBroadException
     try:
         user = await user_controllers.get_users(user_id=int(user_id))
@@ -372,7 +377,8 @@ async def get_user(user_id: int)-> Response:  # Returns 'application/json'
         return await error_response(get_user.__name__, traceback.format_exc())
 
 
-@users_api.route('/users/edit/<int:user_id>', methods=('POST', ))
+@users_api.route('/users/edit/<int:user_id>/', methods=('POST', 'PATCH',))
+@users_api.route('/users/edit/', methods=('POST', 'PATCH',), defaults={'user_id': None})
 @app_auth_required
 @user_auth_required
 @request_limit(max_requests=20, ttl=60)
@@ -479,10 +485,11 @@ async def edit_user(user_id: int)-> Response:  # Returns 'application/json'
         return await error_response(edit_user.__name__, traceback.format_exc())
 
 
-@users_api.route('/users/remove/<int:user_id>', methods=('DELETE', ))
+@users_api.route('/users/remove/<int:user_id>/', methods=('DELETE', ))
+@users_api.route('/users/remove/', methods=('DELETE',), defaults={'user_id': None})
 @app_auth_required
 @user_auth_required
-@request_limit(max_requests=1, ttl=60*60)
+@request_limit(max_requests=5, ttl=60*60)
 @json_content_type_required
 async def remove_user(user_id: int)-> Response:  # Returns 'application/json'
     """
@@ -527,7 +534,7 @@ async def remove_user(user_id: int)-> Response:  # Returns 'application/json'
              }
     """
     data = await api_request(await request.data)
-    if data.user_id is None or data.hash is None:
+    if user_id is None or data.user_id is None or data.hash is None:
         return_data = await api_response(success=False, op=remove_user.__name__, msg='Malformed request data.',
                                          error='#MALFORMED_REQUEST')
         return Response(return_data, status=400, mimetype='application/json', content_type='application/json', )
@@ -551,7 +558,7 @@ async def remove_user(user_id: int)-> Response:  # Returns 'application/json'
         return await error_response(remove_user.__name__, traceback.format_exc())
 
 
-@users_api.route('/bots/add', methods=('POST', ))
+@users_api.route('/bots/add/', methods=('POST', ))
 @app_auth_required
 @user_auth_required
 @request_limit(max_requests=20, ttl=60*60)
@@ -649,7 +656,8 @@ async def add_bots()-> Response:  # Returns 'application/json'
         return await error_response(add_bots.__name__, traceback.format_exc())
 
 
-@users_api.route('/bots/get/<int:bot_id>', methods=('GET', ))
+@users_api.route('/bots/get/<int:bot_id>/', methods=('GET', ))
+@users_api.route('/bots/get/', methods=('GET',), defaults={'bot_id': None})
 @app_auth_required
 @user_auth_required
 async def get_bot(bot_id: int)-> Response:  # Returns 'application/json'
@@ -704,6 +712,10 @@ async def get_bot(bot_id: int)-> Response:  # Returns 'application/json'
                      "stack_trace": str (Python stacktrace)
                  }
         """
+    if bot_id is None:
+        return_data = await api_response(success=False, op=get_bot.__name__, msg='Malformed request data.',
+                                         error='#MALFORMED_REQUEST')
+        return Response(return_data, status=400, mimetype='application/json', content_type='application/json', )
     # noinspection PyBroadException
     try:
         bot = await user_controllers.get_bots(bot_id=bot_id)
@@ -726,7 +738,8 @@ async def get_bot(bot_id: int)-> Response:  # Returns 'application/json'
         return await error_response(get_bot.__name__, traceback.format_exc())
 
 
-@users_api.route('/bots/edit/<int:bot_id>', methods=('POST', ))
+@users_api.route('/bots/edit/<int:bot_id>/', methods=('POST', 'PATCH',))
+@users_api.route('/bots/edit/', methods=('POST', 'PATCH',), defaults={'bot_id': None})
 @app_auth_required
 @user_auth_required
 @request_limit(max_requests=5, ttl=60)
@@ -840,7 +853,8 @@ async def edit_bot(bot_id: int)-> Response:  # Returns 'application/json'
         return await error_response(edit_bot.__name__, traceback.format_exc())
 
 
-@users_api.route('/bots/remove/<int:bot_id>', methods=('DELETE', ))
+@users_api.route('/bots/remove/<int:bot_id>/', methods=('DELETE', ))
+@users_api.route('/bots/remove/', methods=('DELETE',), defaults={'bot_id': None})
 @app_auth_required
 @user_auth_required
 @request_limit(max_requests=50, ttl=60*60)
@@ -893,16 +907,16 @@ async def remove_bot(bot_id: int)-> Response:  # Returns 'application/json'
                  }
         """
     data = await api_request(await request.data)
-    if data.bot_id is None or data.bot_token is None or data.owner_info is None \
+    if bot_id is None or data.bot_id is None or data.bot_token is None or data.owner_info is None \
             or not isinstance(data.owner_info, SuperDict) or \
-            (data.owner_info.user_id is None or data.owner_info.hash is None):
+            (data.owner_info.user_id is None or data.owner_info.hash is None) or (bot_id != data.bot_id):
         return_data = await api_response(success=False, op=remove_bot.__name__, msg='Malformed request data.',
                                          error='#MALFORMED_REQUEST')
         return Response(return_data, status=400, mimetype='application/json', content_type='application/json', )
     # noinspection PyBroadException
     try:
         user = await user_controllers.get_users(user_id=int(data.owner_info.user_id))
-        bot = await user_controllers.get_bots(bot_id=bot_id)
+        bot = await user_controllers.get_bots(bot_id=bot_id, bot_token=data.bot_token)
 
         if bot.owner != user.uid:
             return_data = await api_response(False, op=remove_bot.__name__, msg='User can not edit bot.',

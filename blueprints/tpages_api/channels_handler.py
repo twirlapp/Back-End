@@ -52,7 +52,7 @@ def verify_channel_data(request_data: SuperDict)-> bool:
     return valid
 
 
-@channels_api.route('/channels/add', methods=('POST',))
+@channels_api.route('/channels/add/', methods=('POST',))
 @app_auth_required
 @json_content_type_required
 @user_auth_required
@@ -154,7 +154,8 @@ async def add_channels()-> Response:
         return await error_response(add_channels.__name__, traceback.format_exc())
 
 
-@channels_api.route('/channels/get/<int:channel_id>', methods=('GET', ))
+@channels_api.route('/channels/get/<int:channel_id>/', methods=('GET', ))
+@channels_api.route('/channels/get/', methods=('GET',), defaults={'channel_id': None})
 @app_auth_required
 @json_content_type_required
 @user_auth_required
@@ -215,6 +216,11 @@ async def get_channel(channel_id: int)-> Response:
                  "stack_trace": str (Python stacktrace)
              }
     """
+    if channel_id is None:
+        return_data = await api_response(success=False, op=get_channel.__name__, msg='Malformed request data.',
+                                         error='#MALFORMED_REQUEST')
+        return Response(return_data, status=400, mimetype='application/json', content_type='application/json', )
+    # noinspection PyBroadException
     try:
         channel = await channel_controllers.get_channels(channel_id=int(channel_id))
         data = {
@@ -229,9 +235,12 @@ async def get_channel(channel_id: int)-> Response:
         return_data = await api_response(success=False, op=get_channel.__name__, msg="Channel does not exist.",
                                          error='#CHANNEL_NOT_FOUND')
         return Response(return_data, status=404, mimetype='application/json', content_type='application/json', )
+    except Exception:
+        return await error_response(get_channel.__name__, traceback.format_exc())
 
 
-@channels_api.route('/channels/edit/<int:channel_id>', methods=('POST', ))
+@channels_api.route('/channels/edit/<int:channel_id>/', methods=('POST', 'PATCH',))
+@channels_api.route('/channels/edit/', methods=('POST', 'PATCH',), defaults={'channel_id': None})
 @app_auth_required
 @json_content_type_required
 @user_auth_required
@@ -352,7 +361,8 @@ async def edit_channel(channel_id: int)-> Response:
         return await error_response(edit_channel.__name__, traceback.format_exc())
 
 
-@channels_api.route('/channels/edit_bot/<int:channel_id>', methods=('POST', ))
+@channels_api.route('/channels/edit_bot/<int:channel_id>/', methods=('POST', 'PATCH',))
+@channels_api.route('/channels/edit_bot/', methods=('POST', 'PATCH',), defaults={'channel_id': None})
 @app_auth_required
 @json_content_type_required
 @user_auth_required
@@ -420,6 +430,10 @@ async def edit_channel_bot(channel_id: int)-> Response:
                  "stack_trace": str (Python stacktrace)
              }
     """
+    if channel_id is None:
+        return_data = await api_response(success=False, op=edit_channel_bot.__name__, msg='Malformed request data.',
+                                         error='#MALFORMED_REQUEST')
+        return Response(return_data, status=400, mimetype='application/json', content_type='application/json', )
     data = await api_request(await request.data)
     # noinspection PyBroadException
     try:
@@ -466,7 +480,8 @@ async def edit_channel_bot(channel_id: int)-> Response:
         return await error_response(edit_channel_bot.__name__, traceback.format_exc())
 
 
-@channels_api.route('/channels/add_admins/<int:channel_id>', methods=('POST', ))
+@channels_api.route('/channels/add_admins/<int:channel_id>/', methods=('POST', 'PATCH',))
+@channels_api.route('/channels/add_admins/', methods=('POST', 'PATCH',), defaults={'channel_id': None})
 @app_auth_required
 @json_content_type_required
 @user_auth_required
@@ -534,6 +549,10 @@ async def add_admins(channel_id: int)-> Response:
                  "stack_trace": str (Python stacktrace)
              }
     """
+    if channel_id is None:
+        return_data = await api_response(success=False, op=add_admins.__name__, msg='Malformed request data.',
+                                         error='#MALFORMED_REQUEST')
+        return Response(return_data, status=400, mimetype='application/json', content_type='application/json', )
     data = await api_request(await request.data)
     # noinspection PyBroadException
     try:
@@ -582,7 +601,10 @@ async def add_admins(channel_id: int)-> Response:
         return await error_response(add_admins.__name__, traceback.format_exc())
 
 
-@channels_api.route('/channels/edit_admin/<int:channel_id>/<int:admin_id>', methods=('POST', ))
+@channels_api.route('/channels/edit_admin/<int:channel_id>/<int:admin_id>/', methods=('POST', 'PATCH',))
+@channels_api.route('/channels/edit_admin/<int:channel_id>/', methods=('POST', 'PATCH',), defaults={'admin_id': None})
+@channels_api.route('/channels/edit_admin/', methods=('POST', 'PATCH',),
+                    defaults={'channel_id': None, 'admin_id': None})
 @app_auth_required
 @json_content_type_required
 @user_auth_required
@@ -654,6 +676,10 @@ async def edit_admin(channel_id: int, admin_id: int)-> Response:
                  "stack_trace": str (Python stacktrace)
              }
     """
+    if channel_id is None or admin_id is None:
+        return_data = await api_response(success=False, op=edit_admin.__name__, msg='Malformed request data.',
+                                         error='#MALFORMED_REQUEST')
+        return Response(return_data, status=400, mimetype='application/json', content_type='application/json', )
     data = await api_request(await request.data)
     # noinspection PyBroadException
     try:
@@ -708,7 +734,10 @@ async def edit_admin(channel_id: int, admin_id: int)-> Response:
         return await error_response(edit_admin.__name__, traceback.format_exc())
 
 
-@channels_api.route('/channels/remove_admin/<int:channel_id>/<int:admin_id>', methods=('DELETE', ))
+@channels_api.route('/channels/remove_admin/<int:channel_id>/<int:admin_id>/', methods=('DELETE', ))
+@channels_api.route('/channels/remove_admin/<int:channel_id>/', methods=('POST', 'PATCH',), defaults={'admin_id': None})
+@channels_api.route('/channels/remove_admin/', methods=('POST', 'PATCH'),
+                    defaults={'channel_id': None, 'admin_id': None})
 @app_auth_required
 @json_content_type_required
 @user_auth_required
@@ -773,6 +802,10 @@ async def remove_admin(channel_id: int, admin_id: int)-> Response:
                  "stack_trace": str (Python stacktrace)
              }
     """
+    if channel_id is None or admin_id is None:
+        return_data = await api_response(success=False, op=remove_admin.__name__, msg='Malformed request data.',
+                                         error='#MALFORMED_REQUEST')
+        return Response(return_data, status=400, mimetype='application/json', content_type='application/json', )
     data = await api_request(await request.data)
     # noinspection PyBroadException
     try:
@@ -823,6 +856,7 @@ async def remove_admin(channel_id: int, admin_id: int)-> Response:
 
 
 @channels_api.route('/channels/remove/<int:channel_id>', methods=('DELETE', ))
+@channels_api.route('/channels/remove/', methods=('DELETE',), defaults={'channel_id': None})
 @app_auth_required
 @json_content_type_required
 @user_auth_required
@@ -830,9 +864,66 @@ async def remove_admin(channel_id: int, admin_id: int)-> Response:
 async def remove_channel(channel_id: int)-> Response:
     """
     Removes a channel from the database, and all the posts associated with it.
-    :param channel_id:
-    :return:
+    :param channel_id: The channel unique identifier
+
+    The JSON formats to be passed by the call is at it follows:
+    {
+        "owner_info": {
+            "user_id": int,
+            "hash": `sha256 of "user_id" + unicode password, case sensitive`
+        }
+    }
+    :return: JSON serialized Response
+
+             Possible Responses:
+             200 - OK, with response:
+             {
+                 "success": True,
+                 "op": "remove_channel",
+                 "msg": "Channel and all it's associated data successfully removed."
+             }
+
+             400 - Bad Request:
+             {
+                 "success": False,
+                 "op": "remove_channel",
+                 "msg": "{reason}"
+
+             }
+
+             401 - Unauthorized:
+             {
+                 "success": False,
+                 "op": "remove_channel",
+                 "msg": "Unauthorized Application"
+             }
+
+             403 - Forbidden
+             {
+                 "success": False,
+                 "op": "remove_channel",
+                 "msg": "{reason}"
+             }
+
+             404 - Channel / User not Found:
+             {
+                "success": False,
+                "op": "remove_channel",
+                "msg": "{channel / user} does not exist."
+             }
+
+             500 - Server Error:
+             {
+                 "success": False,
+                 "op": "remove_channel",
+                 "msg": "Internal Server Error",
+                 "stack_trace": str (Python stacktrace)
+             }
     """
+    if channel_id is None:
+        return_data = await api_response(success=False, op=remove_admin.__name__, msg='Malformed request data.',
+                                         error='#MALFORMED_REQUEST')
+        return Response(return_data, status=400, mimetype='application/json', content_type='application/json', )
     data = await api_request(await request.data)
     # noinspection PyBroadException
     try:
@@ -854,13 +945,10 @@ async def remove_channel(channel_id: int)-> Response:
 
         if channel_deleted:
             return_data = await api_response(success=True, op=remove_channel.__name__,
-                                             msg="Channel successfully removed.")
+                                             msg="Channel and all it's associated data successfully removed.")
             return Response(return_data, status=200, mimetype='application/json', content_type='application/json', )
         else:
-
-            return_data = await api_response(success=True, op=remove_channel.__name__, msg='Channel does not exist.',
-                                             error='#CHANNEL_NOT_FOUND')
-            return Response(return_data, status=404, mimetype='application/json', content_type='application/json', )
+            raise channel_controllers.Channel.DoesNotExist('')
 
     except channel_controllers.Channel.DoesNotExist:
         return_data = await api_response(success=True, op=remove_channel.__name__, msg='Channel does not exist.',
