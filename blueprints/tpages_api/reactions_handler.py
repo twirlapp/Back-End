@@ -27,12 +27,12 @@ from .api_utils import app_auth_required, json_content_type_required, error_resp
 from src.utils.json_handlers import api_request, api_response
 import traceback
 
-posts_api = Blueprint('posts', __name__, static_folder='./static', static_url_path='/static/files',
-                      template_folder='./templates', subdomain='api')
+reactions_api = Blueprint('reactions', __name__, static_folder='./static', static_url_path='/static/files',
+                          template_folder='./templates', subdomain='api')
 
 
-@posts_api.route('/reactions/react/<str:post_id>/', methods=('POST',))
-@posts_api.route('/reactions/react/', methods=('POST',), defaults={'post_id': None})
+@reactions_api.route('/reactions/react/<str:post_id>/', methods=('POST',))
+@reactions_api.route('/reactions/react/', methods=('POST',), defaults={'post_id': None})
 @app_auth_required
 @json_content_type_required
 @request_limit(60, 30)
