@@ -442,7 +442,7 @@ class DocumentPost(PostModel):
             reactions=[
                 dict(emoji=i.emoji, count=i.count) for i in self.reactions.reactions
             ],
-            file=dict(
+            document=dict(
                 file_id=self.file_id,
                 file_size=self.file_size,
                 file_name=self.file_name,
