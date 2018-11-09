@@ -31,7 +31,7 @@ class Markdown:
     This markdown complies with Telegram's markdown style, which can be seen at
     https://core.telegram.org/bots/api#formatting-options
     """
-    MARKDOWN_CHARS = ('*', '_', '`', '```', '[', ']', '(', ')', )
+    MARKDOWN_CHARS = ('*', '_', '`', '```', )
     USERNAME_ENTITY_REGEX = re.compile('(^@[\w_]{5,})')
     HASHTAG_ENTITY_REGEX = re.compile('(^#[\S_]+)')
     LINK_ENTITY_REGEX = re.compile('(([a-z]+:(//)?)?[\w._\-]+(@?)[.\w]{3,}(/?[^\s]+))')
@@ -85,6 +85,13 @@ class Markdown:
                 continue
             else:
                 text += string[index]
+                if string[index] == '\\':
+                    if string[index+1:index+3] == '```':
+                        index += 4
+                        continue
+                    if string[index+1] in Markdown.MARKDOWN_CHARS:
+                        index += 2
+                        continue
                 index += 1
         if last_markdown is not None:
             raise KeyError('Invalid markdown at index %d' % last_markdown_index)
