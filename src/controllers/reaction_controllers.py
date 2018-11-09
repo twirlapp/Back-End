@@ -82,10 +82,12 @@ async def user_reaction(user_model: User = None, user_id: int = None, *, post_id
     :param index: The index of the reaction emoji the user reacted.
     :return: [UserReaction] instance proving the success of the transaction
     """
-    from .post_controllers import get_posts
+    from .post_controllers import get_posts, __POST_CACHE
     try:
         user = user_model.uid if user_model is not None else user_id
         post = await get_posts(post_id=post_id)
+        if post.reactions is None:
+            raise IndexError('')
         now = datetime.datetime.utcnow()
         get = to_async(UserReaction.objects.get)
         try:
@@ -102,18 +104,26 @@ async def user_reaction(user_model: User = None, user_id: int = None, *, post_id
                 reaction_index=index,
                 reaction_date=now
             )
+        except IndexError:
+            raise
         if _usr_reaction.is_valid():
-            reaction_save = to_async(_usr_reaction.save)
-            await reaction_save(full_clean=True)
-            post.reactions.reactions[index] += 1
-            post.reactions.total_count += 1
-            save_post = to_async(post.save)
-            await save_post()
-            return _usr_reaction
+            try:
+                post.reactions.reactions[index] += 1
+                post.reactions.total_count += 1
+                reaction_save = to_async(_usr_reaction.save)
+                await reaction_save(full_clean=True)
+                save_post = to_async(post.save)
+                await save_post()
+                __POST_CACHE[post.post_id] = post
+                return _usr_reaction
+            except IndexError:
+                raise
         else:
             raise _usr_reaction.full_clean()
 
     except PostModel.DoesNotExist:
+        raise
+    except IndexError:
         raise
 
 
