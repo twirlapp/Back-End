@@ -23,5 +23,6 @@
 
 from .channels_handler import channels_api
 from .users_handler import users_api
+from .posts_handler import posts_api
 
-__all__ = ['channels_api', 'users_api']
+__all__ = ['channels_api', 'users_api', 'posts_api']
