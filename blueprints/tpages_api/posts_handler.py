@@ -1539,6 +1539,7 @@ async def delete_posts_group(group_hash: str)-> Response:
     try:
         post_group = await post_controllers.get_post_group(group_hash=group_hash)
         channel = await channel_controllers.get_channels(channel_id=post_group.channel)
+
         uid = request.headers.get('User-Id', None)
         if int(uid) != post_group.creator:
             is_admin = False
