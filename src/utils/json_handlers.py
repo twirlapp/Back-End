@@ -63,6 +63,10 @@ class SuperDict(dict):
             if isinstance(v, dict):
                 if rcall < 5:
                     v = SuperDict(v, rcall=rcall+1)
+            elif isinstance(v, list):
+                if rcall < 5:
+                    _ = rcall + 1
+                    v = [SuperDict(i, _) for i in v]
             self[k] = v
 
     def __getattr__(self, item):
@@ -107,15 +111,7 @@ async def api_request(data: str)-> Union[SuperDict, List[SuperDict]]:
     """
     # noinspection PyBroadException
     try:
-        _deserialized_data = await decode(data)
-        if isinstance(_deserialized_data, list):
-            deserialized_data = []
-            for item in _deserialized_data:
-                deserialized_data.append(SuperDict(item))
-
-        else:
-            deserialized_data = _deserialized_data
-
+        deserialized_data = await decode(data)
         return SuperDict(deserialized_data)
     except Exception:
         return SuperDict({})
