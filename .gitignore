@@ -102,5 +102,9 @@ venv.bak/
 
 # mypy
 .mypy_cache/
-#IDE cache
+
+# IDE cache
 .idea/
+
+# Error codes
+ERRORCODES.txt

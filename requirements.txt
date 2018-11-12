@@ -27,3 +27,4 @@ pymodm
 python-telegram-bot
 ujson
 bcrypt
+itsdangerous
