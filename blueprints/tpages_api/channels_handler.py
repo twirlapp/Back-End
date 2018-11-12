@@ -77,7 +77,7 @@ async def add_channels()-> Response:
     :return: JSON serialized Response
 
              Possible Responses:
-             200 - OK, with response:
+             201 - OK, with response:
              {
                  "success": True,
                  "op": "add_channels",
@@ -96,14 +96,14 @@ async def add_channels()-> Response:
              {
                  "success": False,
                  "op": "add_channels",
-                 "msg": "Unauthorized Application"
+                 "msg": "{reason}"
              }
 
              403 - Forbidden
              {
                  "success": False,
                  "op": "add_channels",
-                 "msg": "{reason}"
+                 "msg": "Channel already added."
              }
 
              404 - Not Found (User)
@@ -133,14 +133,14 @@ async def add_channels()-> Response:
         if not bcrypt.checkpw(data.owner_info.hash.lower().encode(), user.user_secure):
             return_data = await api_response(False, op=add_channels.__name__, msg='User not Authenticated.',
                                              error='#USER_NOT_AUTHENTICATED')
-            return Response(return_data, status=403, mimetype='application/json', content_type='application/json', )
+            return Response(return_data, status=401, mimetype='application/json', content_type='application/json', )
 
         await channel_controllers.add_channel(channel_id=int(data.channel_id), user_model=user, title=data.title,
                                               description=data.descrpition, username=data.username,
                                               private_link=data.private_link, photo_id=data.profile_photo)
 
         return_data = await api_response(success=True, op=add_channels.__name__, msg='Channel successfully added.')
-        return Response(return_data, status=200, mimetype='application/json', content_type='application/json', )
+        return Response(return_data, status=201, mimetype='application/json', content_type='application/json', )
 
     except channel_controllers.ChannelAlreadyAdded:
             return_data = await api_response(False, op=add_channels.__name__, msg='Channel already added.',
@@ -191,14 +191,7 @@ async def get_channel(channel_id: int)-> Response:
              {
                  "success": False,
                  "op": "get_channel",
-                 "msg": "Unauthorized Application"
-             }
-
-             403 - Forbidden
-             {
-                 "success": False,
-                 "op": "get_channel",
-                 "msg": "User not Authenticated."
+                 "msg": "{reason}"
              }
 
              404 - User not Found:
@@ -286,14 +279,14 @@ async def edit_channel(channel_id: int)-> Response:
              {
                  "success": False,
                  "op": "edit_channel",
-                 "msg": "Unauthorized Application"
+                 "msg": "{reason}"
              }
 
              403 - Forbidden
              {
                  "success": False,
                  "op": "edit_channel",
-                 "msg": "User not Authenticated."
+                 "msg": "User not Authorized to edit channel."
              }
 
              404 - Channel not Found:
@@ -332,14 +325,14 @@ async def edit_channel(channel_id: int)-> Response:
                     break
             if not can_edit:
                 return_data = await api_response(False, op=edit_channel.__name__,
-                                                 msg='User not authorized to edit channel.',
+                                                 msg='User not Authorized to edit channel.',
                                                  error='#USER_CANT_PERFORM')
                 return Response(return_data, status=403, mimetype='application/json', content_type='application/json')
 
         if not bcrypt.checkpw(data.owner_info.hash.lower().encode(), user.user_secure):
             return_data = await api_response(False, op=edit_channel.__name__, msg='User not Authenticated.',
                                              error='#USER_NOT_AUTHENTICATED')
-            return Response(return_data, status=403, mimetype='application/json', content_type='application/json', )
+            return Response(return_data, status=401, mimetype='application/json', content_type='application/json', )
 
         await channel_controllers.edit_channel_info(channel_model=channel, title=data.title,
                                                     description=data.description, username=data.username,
@@ -405,14 +398,14 @@ async def edit_channel_bot(channel_id: int)-> Response:
              {
                  "success": False,
                  "op": "edit_channel_bot",
-                 "msg": "Unauthorized Application"
+                 "msg": "{reason}"
              }
 
              403 - Forbidden
              {
                  "success": False,
                  "op": "edit_channel_bot",
-                 "msg": "User not Authenticated."
+                 "msg": "User not Authorized to edit channel bot."
              }
 
              404 - Channel not Found:
@@ -441,14 +434,14 @@ async def edit_channel_bot(channel_id: int)-> Response:
         user = await user_controllers.get_users(user_id=int(data.user_info.user_id))
         if channel.creator != user.uid:
             return_data = await api_response(False, op=edit_channel_bot.__name__,
-                                             msg='User not authorized to edit channel bot.',
+                                             msg='User not Authorized to edit channel bot.',
                                              error='#USER_CANT_PERFORM')
             return Response(return_data, status=403, mimetype='application/json', content_type='application/json', )
 
         if not bcrypt.checkpw(data.owner_info.hash.lower().encode(), user.user_secure):
             return_data = await api_response(False, op=edit_channel_bot.__name__, msg='User not Authenticated.',
                                              error='#USER_NOT_AUTHENTICATED')
-            return Response(return_data, status=403, mimetype='application/json', content_type='application/json', )
+            return Response(return_data, status=401, mimetype='application/json', content_type='application/json', )
 
         bot_added = await channel_controllers.edit_channel_bot(user_model=user, channel_model=channel,
                                                                bot_id=int(data.bot_id))
@@ -459,7 +452,7 @@ async def edit_channel_bot(channel_id: int)-> Response:
             return Response(return_data, status=200, mimetype='application/json', content_type='application/json', )
         else:
             return_data = await api_response(False, op=edit_channel_bot.__name__,
-                                             msg='User not authorized to edit channel.',
+                                             msg='User not Authorized to edit channel bot.',
                                              error='#USER_CANT_PERFORM')
             return Response(return_data, status=403, mimetype='application/json', content_type='application/json', )
 
@@ -524,14 +517,14 @@ async def add_admins(channel_id: int)-> Response:
              {
                  "success": False,
                  "op": "add_admins",
-                 "msg": "Unauthorized Application"
+                 "msg": "{reason}"
              }
 
              403 - Forbidden
              {
                  "success": False,
                  "op": "add_admins",
-                 "msg": "User not Authenticated."
+                 "msg": "User not Authorized to edit channel."
              }
 
              404 - Channel not Found:
@@ -561,14 +554,14 @@ async def add_admins(channel_id: int)-> Response:
         user = await user_controllers.get_users(user_id=int(data.user_info.user_id))
         if channel.creator != user.uid:
             return_data = await api_response(False, op=add_admins.__name__,
-                                             msg='User not authorized to edit channel.',
+                                             msg='User not Authorized to edit channel.',
                                              error='#USER_CANT_PERFORM')
             return Response(return_data, status=403, mimetype='application/json', content_type='application/json', )
 
         if not bcrypt.checkpw(data.owner_info.hash.lower().encode(), user.user_secure):
             return_data = await api_response(False, op=add_admins.__name__, msg='User not Authenticated.',
                                              error='#USER_NOT_AUTHENTICATED')
-            return Response(return_data, status=403, mimetype='application/json', content_type='application/json', )
+            return Response(return_data, status=401, mimetype='application/json', content_type='application/json', )
 
         try:
             new_admin = await user_controllers.get_users(user_id=data.new_admin)
@@ -651,14 +644,14 @@ async def edit_admin(channel_id: int, admin_id: int)-> Response:
              {
                  "success": False,
                  "op": "edit_admin",
-                 "msg": "Unauthorized Application"
+                 "msg": "{reason}"
              }
 
              403 - Forbidden
              {
                  "success": False,
                  "op": "edit_admin",
-                 "msg": "User not Authenticated."
+                 "msg": "User not Authorized to edit channel."
              }
 
              404 - Channel / User not Found:
@@ -688,7 +681,7 @@ async def edit_admin(channel_id: int, admin_id: int)-> Response:
         user = await user_controllers.get_users(user_id=int(data.user_info.user_id))
         if channel.creator != user.uid:
             return_data = await api_response(False, op=edit_admin.__name__,
-                                             msg='User not authorized to edit channel.',
+                                             msg='User not Authorized to edit channel.',
                                              error='#USER_CANT_PERFORM')
             return Response(return_data, status=403, mimetype='application/json', content_type='application/json', )
 
@@ -777,14 +770,14 @@ async def remove_admin(channel_id: int, admin_id: int)-> Response:
              {
                  "success": False,
                  "op": "remove_admin",
-                 "msg": "Unauthorized Application"
+                 "msg": "{reason}"
              }
 
              403 - Forbidden
              {
                  "success": False,
                  "op": "remove_admin",
-                 "msg": "User not Authenticated."
+                 "msg": "User not Authorized to edit channel."
              }
 
              404 - Channel / User not Found:
@@ -814,14 +807,14 @@ async def remove_admin(channel_id: int, admin_id: int)-> Response:
         user = await user_controllers.get_users(user_id=int(data.user_info.user_id))
         if channel.creator != user.uid:
             return_data = await api_response(False, op=remove_admin.__name__,
-                                             msg='User not authorized to edit channel.',
+                                             msg='User not Authorized to edit channel.',
                                              error='#USER_CANT_PERFORM')
             return Response(return_data, status=403, mimetype='application/json', content_type='application/json', )
 
         if not bcrypt.checkpw(data.owner_info.hash.lower().encode(), user.user_secure):
             return_data = await api_response(False, op=remove_admin.__name__, msg='User not Authenticated.',
                                              error='#USER_NOT_AUTHENTICATED')
-            return Response(return_data, status=403, mimetype='application/json', content_type='application/json', )
+            return Response(return_data, status=401, mimetype='application/json', content_type='application/json', )
 
         index = 0
         admin_exists = False
@@ -835,11 +828,12 @@ async def remove_admin(channel_id: int, admin_id: int)-> Response:
 
         if admin_exists:
             channel.authorized_admins.pop(index)
+            channel.save()
             return_data = await api_response(success=True, op=remove_admin.__name__,
                                              msg="Admin successfully removed.")
             return Response(return_data, status=200, mimetype='application/json', content_type='application/json', )
         else:
-            return_data = await api_response(success=True, op=remove_admin.__name__, msg='User does not exist.',
+            return_data = await api_response(success=True, op=remove_admin.__name__, msg='Admin does not exist.',
                                              error='#ADMIN_NOT_FOUND')
             return Response(return_data, status=404, mimetype='application/json', content_type='application/json', )
 
@@ -895,14 +889,14 @@ async def remove_channel(channel_id: int)-> Response:
              {
                  "success": False,
                  "op": "remove_channel",
-                 "msg": "Unauthorized Application"
+                 "msg": "{reason}"
              }
 
              403 - Forbidden
              {
                  "success": False,
                  "op": "remove_channel",
-                 "msg": "{reason}"
+                 "msg": "User not authorized to remove channel."
              }
 
              404 - Channel / User not Found:
@@ -939,7 +933,7 @@ async def remove_channel(channel_id: int)-> Response:
         if not bcrypt.checkpw(data.owner_info.hash.lower().encode(), user.user_secure):
             return_data = await api_response(False, op=remove_channel.__name__, msg='User not Authenticated.',
                                              error='#USER_NOT_AUTHENTICATED')
-            return Response(return_data, status=403, mimetype='application/json', content_type='application/json', )
+            return Response(return_data, status=401, mimetype='application/json', content_type='application/json', )
 
         channel_deleted = await channel_controllers.delete_channel(channel)
 

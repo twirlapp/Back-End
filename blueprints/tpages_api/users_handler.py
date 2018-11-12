@@ -111,14 +111,7 @@ async def auth_user()-> Response:
              {
                  "success": False,
                  "op": "auth_user",
-                 "msg": "Unauthorized Application"
-             }
-
-             403 - Forbidden:
-             {
-                "success": False,
-                "op": "auth_user",
-                "msg": "User authentication failed."
+                 "msg": "{reason}"
              }
 
              404 - User not Found:
@@ -147,7 +140,7 @@ async def auth_user()-> Response:
         if not bcrypt.checkpw(data.hash.lower().encode(), user.user_secure):
             return_data = await api_response(success=False, op=auth_user.__name__, msg='User not Authenticated.',
                                              error='#USER_NOT_AUTHENTICATED')
-            return Response(return_data, status=403, mimetype='application/json', content_type='application/json', )
+            return Response(return_data, status=401, mimetype='application/json', content_type='application/json', )
         else:
             serializer = URLSafeTimedSerializer(secret_key=config.APP_TEMP_SECRET_KEY)
             # new_hash = hash_generator((str(user.uid) + config.APP_TEMP_SECRET_KEY), hash_type='sha256')
@@ -220,7 +213,7 @@ async def add_users()-> Response:  # Returns 'application/json'
     :return: JSON serialized Response
 
              Possible Responses:
-             200 - OK, with response:
+             201 - OK, with response:
              {
                  "success": True,
                  "op": "add_users",
@@ -283,11 +276,11 @@ async def add_users()-> Response:  # Returns 'application/json'
 
         return_data = await api_response(success=True, op=add_users.__name__,
                                          msg="User(s) successfully added.", qty=count)
-        return Response(return_data, status=200, mimetype='application/json', content_type='application/json', )
+        return Response(return_data, status=201, mimetype='application/json', content_type='application/json', )
     except user_controllers.UserAlreadyAdded:
         return_data = await api_response(success=False, op=add_users.__name__,
                                          msg="User is already registered.", error='#USER_ALREADY_REGISTERED')
-        return Response(return_data, status=400, mimetype='application/json', content_type='application/json', )
+        return Response(return_data, status=403, mimetype='application/json', content_type='application/json', )
     except Exception:
         return await error_response(add_users.__name__, traceback.format_exc())
 
@@ -332,7 +325,7 @@ async def get_user(user_id: int)-> Response:  # Returns 'application/json'
              {
                  "success": False,
                  "op": "get_user",
-                 "msg": "Unauthorized Application"
+                 "msg": "{reason}"
              }
 
              404 - User not Found:
@@ -423,14 +416,7 @@ async def edit_user(user_id: int)-> Response:  # Returns 'application/json'
              {
                  "success": False,
                  "op": "edit_user",
-                 "msg": "Unauthorized Application."
-             }
-
-             403 - Forbidden:
-             {
-                 "success": False,
-                 "op": "edit_user",
-                 "msg": "User not Authenticated."
+                 "msg": "{reason}"
              }
 
              404 - User not Found:
@@ -462,7 +448,7 @@ async def edit_user(user_id: int)-> Response:  # Returns 'application/json'
         if data.hash is None or not bcrypt.checkpw(data.hash.lower().encode(), user.user_secure):
             return_data = await api_response(False, op=edit_user.__name__, msg='User not Authenticated.',
                                              error='#USER_NOT_AUTHENTICATED')
-            return Response(return_data, status=403, mimetype='application/json', content_type='application/json', )
+            return Response(return_data, status=401, mimetype='application/json', content_type='application/json', )
 
         if data.hash == data.new_hash:
             data.new_hash = None
@@ -515,14 +501,7 @@ async def remove_user(user_id: int)-> Response:  # Returns 'application/json'
              {
                  "success": False,
                  "op": "remove_user",
-                 "msg": "Unauthorized Application"
-             }
-
-             403 - Forbidden:
-             {
-                 "success": False,
-                 "op": "remove_user",
-                 "msg": "User not Authenticated."
+                 "msg": "{reason}"
              }
 
              500 - Server Error:
@@ -544,7 +523,7 @@ async def remove_user(user_id: int)-> Response:  # Returns 'application/json'
         if not bcrypt.checkpw(data.hash.lower().encode(), user.user_secure):
             return_data = await api_response(success=False, op=remove_user.__name__, msg='User not Authenticated.',
                                              error='#USER_NOT_AUTHENTICATED')
-            return Response(return_data, status=403, mimetype='application/json', content_type='application/json', )
+            return Response(return_data, status=401, mimetype='application/json', content_type='application/json', )
         else:
             await user_controllers.delete_user(user_model=user)
             return_data = await api_response(success=True, op=remove_user.__name__,
@@ -585,7 +564,7 @@ async def add_bots()-> Response:  # Returns 'application/json'
         :return: JSON serialized Response
 
                  Possible Responses:
-                 200 - OK, with response:
+                 201 - OK, with response:
                  {
                      "success": True,
                      "op": "add_bots",
@@ -604,14 +583,7 @@ async def add_bots()-> Response:  # Returns 'application/json'
                  {
                      "success": False,
                      "op": "add_bots",
-                     "msg": "Unauthorized Application"
-                 }
-
-                 403 - Forbidden
-                 {
-                     "success": False,
-                     "op": "add_bots",
-                     "msg": "User not authenticated."
+                     "msg": "{reason}"
                  }
 
                  500 - Server Error:
@@ -634,7 +606,7 @@ async def add_bots()-> Response:  # Returns 'application/json'
         if not bcrypt.checkpw(data.owner_info.hash.lower().encode(), user.user_secure):
             return_data = await api_response(False, op=add_bots.__name__, msg='User not Authenticated.',
                                              error='#USER_NOT_AUTHENTICATED')
-            return Response(return_data, status=403, mimetype='application/json', content_type='application/json', )
+            return Response(return_data, status=401, mimetype='application/json', content_type='application/json', )
 
         await user_controllers.add_bot(bot_id=data.bot_id, bot_token=data.bot_token, user_model=user,
                                        bot_name=data.bot_name,
@@ -643,7 +615,7 @@ async def add_bots()-> Response:  # Returns 'application/json'
 
         return_data = await api_response(success=True, op=add_bots.__name__,
                                          msg="Bot(s) successfully added.")
-        return Response(return_data, status=200, mimetype='application/json', content_type='application/json', )
+        return Response(return_data, status=201, mimetype='application/json', content_type='application/json', )
     except user_controllers.BotAlreadyAdded:
         return_data = await api_response(success=False, op=add_bots.__name__,
                                          msg="Bot is already registered.", error='#BOT_ALREADY_REGISTERED')
@@ -694,10 +666,10 @@ async def get_bot(bot_id: int)-> Response:  # Returns 'application/json'
                  {
                      "success": False,
                      "op": "get_bot",
-                     "msg": "Unauthorized Application"
+                     "msg": "{reason}"
                  }
 
-                 404 - User not Found:
+                 404 - Bot not Found:
                  {
                     "success": False,
                     "op": "get_bot",
@@ -786,7 +758,7 @@ async def edit_bot(bot_id: int)-> Response:  # Returns 'application/json'
                  {
                      "success": False,
                      "op": "edit_bot",
-                     "msg": "Unauthorized Application."
+                     "msg": "{reason}"
                  }
 
                  403 - Forbidden:
@@ -831,7 +803,7 @@ async def edit_bot(bot_id: int)-> Response:  # Returns 'application/json'
         if not bcrypt.checkpw(data.owner_info.hash.lower().encode(), user.user_secure):
             return_data = await api_response(False, op=edit_bot.__name__, msg='User not Authenticated.',
                                              error='#USER_NOT_AUTHENTICATED')
-            return Response(return_data, status=403, mimetype='application/json', content_type='application/json', )
+            return Response(return_data, status=401, mimetype='application/json', content_type='application/json', )
 
         await user_controllers.edit_bot_info(bot_model=bot, bot_token=data.bot_token, bot_name=data.bot_name,
                                              username=data.username, profile_photo=data.profile_photo.photo,
@@ -888,14 +860,7 @@ async def remove_bot(bot_id: int)-> Response:  # Returns 'application/json'
                  {
                      "success": False,
                      "op": "remove_bot",
-                     "msg": "Unauthorized Application"
-                 }
-
-                 403 - Forbidden:
-                 {
-                     "success": False,
-                     "op": "remove_bot",
-                     "msg": "User not Authenticated."
+                     "msg": "{reason}"
                  }
 
                  500 - Server Error:
@@ -926,7 +891,7 @@ async def remove_bot(bot_id: int)-> Response:  # Returns 'application/json'
         if not bcrypt.checkpw(data.owner_info.hash.lower().encode(), user.user_secure):
             return_data = await api_response(False, op=remove_bot.__name__, msg='User not Authenticated.',
                                              error='#USER_NOT_AUTHENTICATED')
-            return Response(return_data, status=403, mimetype='application/json', content_type='application/json', )
+            return Response(return_data, status=401, mimetype='application/json', content_type='application/json', )
         await user_controllers.delete_bot(bot_model=bot)
         return_data = await api_response(success=True, op=remove_bot.__name__,
                                          msg='Bot disassociated from all channels and removed.')

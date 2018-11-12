@@ -72,13 +72,13 @@ def user_auth_required(func: Callable):
                 user = await get_users(user_id=deserialized['user_id'])
             except Exception:
                 user = None
-            if str(deserialized['user_id']) != str(user_id) or \
-                    str(deserialized['SSID']) != str(config.APP_SECRET_KEY) or user is None:
+            if user is None or str(deserialized['user_id']) != str(user_id) or \
+                    str(deserialized['SSID']) != str(config.APP_SECRET_KEY):
                 raise BadTimeSignature('')
         except (SignatureExpired, BadTimeSignature):
             return_data = await api_response(False, op=func.__name__, msg='User access not authenticated.',
                                              error='#USER_ACCESS_NOT_AUTHENTICATED')
-            return Response(return_data, status=403, mimetype='application/json', content_type='application/json', )
+            return Response(return_data, status=401, mimetype='application/json', content_type='application/json', )
 
         return await func(*args, **kwargs)
     return decorator
@@ -144,13 +144,13 @@ class request_limit:
                     user = await get_users(user_id=deserialized['user_id'])
                 except Exception:
                     user = None
-                if str(deserialized['user_id']) != str(user_id) or \
-                        str(deserialized['SSID']) != str(config.APP_SECRET_KEY) or user is None:
+                if user is None or str(deserialized['user_id']) != str(user_id) or \
+                        str(deserialized['SSID']) != str(config.APP_SECRET_KEY):
                     raise BadTimeSignature('')
             except (SignatureExpired, BadTimeSignature):
                 return_data = await api_response(False, op=func.__name__, msg='User access not authenticated.',
                                                  error='#USER_ACCESS_NOT_AUTHENTICATED')
-                return Response(return_data, status=403, mimetype='application/json', content_type='application/json', )
+                return Response(return_data, status=401, mimetype='application/json', content_type='application/json', )
             else:
                 now = time.time()
                 if auth_hash not in self._data:

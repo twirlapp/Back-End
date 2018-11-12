@@ -345,7 +345,7 @@ async def add_posts()-> Response:
     :return: JSON serialized Response
 
              Possible Responses:
-             200 - OK, with response:
+             201 - OK, with response:
              {
                  "success": True,
                  "op": "add_posts",
@@ -367,14 +367,14 @@ async def add_posts()-> Response:
              {
                  "success": False,
                  "op": "add_posts",
-                 "msg": "Unauthorized Application"
+                 "msg": "{reason}"
              }
 
              403 - Forbidden:
              {
                 "success": False,
                 "op": "add_posts",
-                "msg": "{reason}"
+                "msg": "User not authorized to post in this channel."
              }
 
              404 - Not Found:
@@ -566,7 +566,7 @@ async def add_posts()-> Response:
                 posts_list = [i.dict for i in posts]
                 return_data = await api_response(success=True, op=add_posts.__name__, msg='Posts successfully added.',
                                                  qty=len(posts), group_hash=posts_group.posts_hash, posts=posts_list)
-                return Response(return_data, status=200, mimetype='application/json', content_type='application/json', )
+                return Response(return_data, status=201, mimetype='application/json', content_type='application/json', )
 
         else:
             return_data = await api_response(success=False, op=add_posts.__name__,
@@ -734,14 +734,7 @@ async def get_post(post_id: str)-> Response:
              {
                  "success": False,
                  "op": "get_post",
-                 "msg": "Unauthorized Application"
-             }
-
-             403 - Forbidden:
-             {
-                "success": False,
-                "op": "get_post",
-                "msg": "{reason}"
+                 "msg": "{reason}"
              }
 
              404 - Not Found:
@@ -963,14 +956,7 @@ async def get_posts_group(group_hash: str)-> Response:
              {
                  "success": False,
                  "op": "get_posts_group",
-                 "msg": "Unauthorized Application"
-             }
-
-             403 - Forbidden:
-             {
-                "success": False,
-                "op": "get_posts_group",
-                "msg": "{reason}"
+                 "msg": "{reason}"
              }
 
              404 - Not Found:
@@ -1168,14 +1154,14 @@ async def edit_post(post_id: str)-> Response:
              {
                  "success": False,
                  "op": "edit_post",
-                 "msg": "Unauthorized Application"
+                 "msg": "{reason}"
              }
 
              403 - Forbidden:
              {
                 "success": False,
                 "op": "edit_post",
-                "msg": "{reason}"
+                "msg": "User not authorized to edit posts in this channel."
              }
 
              404 - Not Found:
@@ -1411,14 +1397,14 @@ async def delete_post(post_id: str)-> Response:
              {
                  "success": False,
                  "op": "delete_post",
-                 "msg": "Unauthorized Application"
+                 "msg": "{reason}"
              }
 
              403 - Forbidden:
              {
                 "success": False,
                 "op": "delete_post",
-                "msg": "{reason}"
+                "msg": "User not authorized to delete posts in this channel."
              }
 
              404 - Not Found:
@@ -1506,14 +1492,14 @@ async def delete_posts_group(group_hash: str)-> Response:
              {
                  "success": False,
                  "op": "delete_posts_group",
-                 "msg": "Unauthorized Application"
+                 "msg": "{reason}"
              }
 
              403 - Forbidden:
              {
                 "success": False,
                 "op": "delete_posts_group",
-                "msg": "{reason}"
+                "msg": "User not authorized to delete posts in this channel."
              }
 
              404 - Not Found:
