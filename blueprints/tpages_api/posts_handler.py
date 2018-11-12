@@ -183,11 +183,11 @@ def validate_posts(posts_data: SuperDict)-> Union[bool, Tuple[bool, Tuple[int]]]
         return False, tuple(invalid_indexes)
 
 
-@posts_api.route('posts/add/', methods=('POST', ))
+@posts_api.route('/posts/add/', methods=('POST', ))
 @app_auth_required
 @json_content_type_required
 @user_auth_required
-@request_limit(max_requests=30, 60)
+@request_limit(30, 60)
 async def add_posts()-> Response:
     """
     Adds the posts on the database.
@@ -586,7 +586,7 @@ async def add_posts()-> Response:
         return await error_response(add_posts.__name__, traceback.format_exc())
 
 
-@posts_api.route('/posts/get/<str:post_id>/', methods=('GET',))
+@posts_api.route('/posts/get/<string:post_id>/', methods=('GET',))
 @posts_api.route('/posts/get/', methods=('GET',), defaults={'post_id': None})
 @app_auth_required
 @user_auth_required
@@ -771,7 +771,7 @@ async def get_post(post_id: str)-> Response:
         return await error_response(get_post.__name__, traceback.format_exc())
 
 
-@posts_api.route('/posts/get_group/<str:group_hash>/', methods=('GET', ))
+@posts_api.route('/posts/get_group/<string:group_hash>/', methods=('GET', ))
 @posts_api.route('/posts/get_group/', methods=('GET',), defaults={'group_hash': None})
 @app_auth_required
 @user_auth_required
@@ -1004,7 +1004,7 @@ async def get_posts_group(group_hash: str)-> Response:
         return await error_response(get_posts_group.__name__, traceback.format_exc())
 
 
-@posts_api.route('/posts/edit/<str:post_id>/', methods=('POST', 'PATCH',))
+@posts_api.route('/posts/edit/<string:post_id>/', methods=('POST', 'PATCH',))
 @posts_api.route('/posts/edit/', methods=('POST', 'PATCH',), defaults={'post_id': None})
 @app_auth_required
 @user_auth_required
@@ -1366,7 +1366,7 @@ async def edit_post(post_id: str)-> Response:
         return await error_response(edit_post.__name__, traceback.format_exc())
 
 
-@posts_api.route('/posts/delete/<str:post_id>/', methods=('DELETE',))
+@posts_api.route('/posts/delete/<string:post_id>/', methods=('DELETE',))
 @posts_api.route('/posts/delete/', methods=('DELETE',), defaults={'post_id': None})
 @app_auth_required
 @user_auth_required
@@ -1461,7 +1461,7 @@ async def delete_post(post_id: str)-> Response:
         return await error_response(delete_post.__name__, traceback.format_exc())
 
 
-@posts_api.route('/posts/delete_group/<str:group_hash>/', methods=('DELETE', ))
+@posts_api.route('/posts/delete_group/<string:group_hash>/', methods=('DELETE', ))
 @posts_api.route('/posts/delete_group/', methods=('DELETE', ), defaults={'group_hash': None})
 @app_auth_required
 @user_auth_required

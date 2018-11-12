@@ -31,7 +31,7 @@ reactions_api = Blueprint('reactions', __name__, static_folder='./static', stati
                           template_folder='./templates', subdomain='api')
 
 
-@reactions_api.route('/reactions/react/<str:post_id>/', methods=('POST',))
+@reactions_api.route('/reactions/react/<string:post_id>/', methods=('POST',))
 @reactions_api.route('/reactions/react/', methods=('POST',), defaults={'post_id': None})
 @app_auth_required
 @json_content_type_required
