@@ -100,6 +100,7 @@ async def user_reaction(user_model: User = None, user_id: int = None, *,
             post.reactions.reactions[_old_index] -= 1
             post.reactions.total_count -= 1
             if index == _old_index:
+                post.save()
                 await remove_user_reaction(user_id=_usr_reaction.user_id, post_id=_usr_reaction.post)
                 return None
         except UserReaction.DoesNotExist:
