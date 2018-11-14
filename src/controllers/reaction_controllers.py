@@ -73,14 +73,16 @@ def create_reaction(reactions_list: List[str] = None,
     return _reactions
 
 
-async def user_reaction(user_model: User = None, user_id: int = None, *, post_id: str, index: int)-> UserReaction:
+async def user_reaction(user_model: User = None, user_id: int = None, *,
+                        post_id: str, index: int)-> Union[UserReaction, None]:
     """
     Adds or edits a user reaction in the database.
     :param user_model: user reference model to identify the reaction.
     :param user_id: Telegram's user ID. Used only if `user_model` is None
     :param post_id: The identifier of the post
     :param index: The index of the reaction emoji the user reacted.
-    :return: [UserReaction] instance proving the success of the transaction
+    :return: [UserReaction] instance or None proving the success of the transaction. If None, it means the reaction
+             was simply removed.
     """
     from .post_controllers import get_posts, __POST_CACHE
     try:
@@ -97,6 +99,9 @@ async def user_reaction(user_model: User = None, user_id: int = None, *, post_id
             _usr_reaction.reaction_date = now
             post.reactions.reactions[_old_index] -= 1
             post.reactions.total_count -= 1
+            if index == _old_index:
+                await remove_user_reaction(user_id=_usr_reaction.user_id, post_id=_usr_reaction.post)
+                return None
         except UserReaction.DoesNotExist:
             _usr_reaction = UserReaction(
                 user_id=user,
