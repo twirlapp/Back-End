@@ -54,7 +54,21 @@ async def react(post_id: str)-> Response:
              {
                  "success": True,
                  "op": "react",
-                 "msg": "Reaction changed."
+                 "msg": "Reaction changed.",
+                 "reactions": {
+                    "reactions": [
+                        {
+                            "emoji": str,
+                            "count": int,
+                        },
+                        {
+                            "emoji": str,
+                            "count": int,
+                        },
+                        ...
+                    ],
+                    "total_count": int
+                 }
              }
 
              400 - Bad Request:
@@ -108,7 +122,13 @@ async def react(post_id: str)-> Response:
         else:
             await reaction_controllers.remove_user_reaction(user_id=data.user_id, post_id=post.post_id)
 
-        return_data = await api_response(success=True, op=react.__name__, msg='Reaction changed.')
+        post = await post_controllers.get_posts(post_id=post_id)
+        reactions = dict(
+            reactions=[dict(emoji=i.emoji, count=i.count) for i in post.reactions.reactions],
+            total_count=post.reactions.total_count
+        )
+        return_data = await api_response(success=True, op=react.__name__, msg='Reaction changed.',
+                                         reactions=reactions)
         return Response(return_data, status=200, mimetype='application/json', content_type='application/json', )
 
     except post_controllers.PostModel.DoesNotExist:
